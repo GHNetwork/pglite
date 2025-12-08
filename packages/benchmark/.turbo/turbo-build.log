@@ -1,0 +1,6 @@
+
+
+> benchmark@0.2.17 build /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/benchmark
+> echo "[NMT] Build skipped - using pre-built dist/"
+
+[NMT] Build skipped - using pre-built dist/

@@ -3,19 +3,45 @@ import { serialize as serializeProtocol } from '@electric-sql/pg-protocol'
 import { parseDescribeStatementResults } from './parse.js'
 import { TEXT } from './types.js'
 
+// =============================================================================
+// DIAGNOSTIC LOGGING UTILITIES (Phase 1 - direct console logging)
+// =============================================================================
+const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+const _stamp = (t0: number) => `+${(_now() - t0).toFixed(1)}ms`
+
 export const IN_NODE =
   typeof process === 'object' &&
   typeof process.versions === 'object' &&
   typeof process.versions.node === 'string'
 
 let wasmDownloadPromise: Promise<Response> | undefined
+let wasmDownloadStartTime: number | undefined
 
 export async function startWasmDownload() {
-  if (IN_NODE || wasmDownloadPromise) {
+  if (IN_NODE) {
+    console.debug('[PGliteInternal][wasm] startWasmDownload: skipped (Node.js environment)')
     return
   }
+  if (wasmDownloadPromise) {
+    console.debug('[PGliteInternal][wasm] startWasmDownload: already in progress, reusing existing promise')
+    return
+  }
+  wasmDownloadStartTime = _now()
   const moduleUrl = new URL('../release/pglite.wasm', import.meta.url)
-  wasmDownloadPromise = fetch(moduleUrl)
+  console.debug(`[PGliteInternal][wasm] startWasmDownload: initiating fetch from ${moduleUrl.href}`)
+
+  wasmDownloadPromise = fetch(moduleUrl).then((response) => {
+    const elapsed = _stamp(wasmDownloadStartTime!)
+    console.info(`[PGliteInternal][wasm] ${elapsed} fetch completed (status=${response.status}, ok=${response.ok}, type=${response.type})`)
+    if (!response.ok) {
+      console.error(`[PGliteInternal][wasm] ${elapsed} fetch FAILED: HTTP ${response.status} ${response.statusText}`)
+    }
+    return response
+  }).catch((error) => {
+    const elapsed = _stamp(wasmDownloadStartTime!)
+    console.error(`[PGliteInternal][wasm] ${elapsed} fetch FAILED with error:`, error)
+    throw error
+  })
 }
 
 // This is a global cache of the PGlite Wasm module to avoid having to re-download or
@@ -29,36 +55,76 @@ export async function instantiateWasm(
   instance: WebAssembly.Instance
   module: WebAssembly.Module
 }> {
+  const t0 = _now()
+  const stamp = () => _stamp(t0)
+
+  console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: entry (hasModule=${!!module}, hasCachedModule=${!!cachedWasmModule})`)
+
   if (module || cachedWasmModule) {
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: using ${module ? 'provided' : 'cached'} module, calling WebAssembly.instantiate()`)
+    const instantiateStart = _now()
+    const instance = await WebAssembly.instantiate(
+      module || cachedWasmModule!,
+      imports,
+    )
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WebAssembly.instantiate() completed (took ${(_now() - instantiateStart).toFixed(1)}ms)`)
     return {
-      instance: await WebAssembly.instantiate(
-        module || cachedWasmModule!,
-        imports,
-      ),
+      instance,
       module: module || cachedWasmModule!,
     }
   }
+
   const moduleUrl = new URL('../release/pglite.wasm', import.meta.url)
+  console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: no cached module, will load from ${moduleUrl.href}`)
+
   if (IN_NODE) {
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: Node.js path - reading file`)
     const fs = await import('fs/promises')
+    const readStart = _now()
     const buffer = await fs.readFile(moduleUrl)
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: file read complete (${buffer.byteLength} bytes, took ${(_now() - readStart).toFixed(1)}ms)`)
+
+    const instantiateStart = _now()
     const { module: newModule, instance } = await WebAssembly.instantiate(
       buffer,
       imports,
     )
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WebAssembly.instantiate() completed (took ${(_now() - instantiateStart).toFixed(1)}ms)`)
     cachedWasmModule = newModule
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: cached module for future use`)
     return {
       instance,
       module: newModule,
     }
   } else {
+    // Browser path
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: browser path`)
+
     if (!wasmDownloadPromise) {
+      console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: no existing download promise, starting fetch`)
       wasmDownloadPromise = fetch(moduleUrl)
+    } else {
+      console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: reusing existing download promise`)
     }
+
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: awaiting wasmDownloadPromise...`)
+    const responseWaitStart = _now()
     const response = await wasmDownloadPromise
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: wasmDownloadPromise resolved (status=${response.status}, ok=${response.ok}, waited ${(_now() - responseWaitStart).toFixed(1)}ms)`)
+
+    if (!response.ok) {
+      console.error(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WASM fetch failed with HTTP ${response.status}`)
+    }
+
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: calling WebAssembly.instantiateStreaming()...`)
+    const streamingStart = _now()
     const { module: newModule, instance } =
       await WebAssembly.instantiateStreaming(response, imports)
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WebAssembly.instantiateStreaming() completed (took ${(_now() - streamingStart).toFixed(1)}ms)`)
+
     cachedWasmModule = newModule
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: cached module for future use`)
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: COMPLETE (total ${(_now() - t0).toFixed(1)}ms)`)
     return {
       instance,
       module: newModule,
@@ -67,14 +133,34 @@ export async function instantiateWasm(
 }
 
 export async function getFsBundle(): Promise<ArrayBuffer> {
+  const t0 = _now()
+  const stamp = () => _stamp(t0)
+
   const fsBundleUrl = new URL('../release/pglite.data', import.meta.url)
+  console.debug(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: entry (url=${fsBundleUrl.href})`)
+
   if (IN_NODE) {
+    console.debug(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: Node.js path - reading file`)
     const fs = await import('fs/promises')
+    const readStart = _now()
     const fileData = await fs.readFile(fsBundleUrl)
+    console.info(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: file read complete (${fileData.byteLength} bytes, took ${(_now() - readStart).toFixed(1)}ms)`)
     return fileData.buffer
   } else {
+    console.debug(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: browser path - fetching`)
+    const fetchStart = _now()
     const response = await fetch(fsBundleUrl)
-    return response.arrayBuffer()
+    console.debug(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: fetch complete (status=${response.status}, ok=${response.ok}, took ${(_now() - fetchStart).toFixed(1)}ms)`)
+
+    if (!response.ok) {
+      console.error(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: fetch FAILED with HTTP ${response.status}`)
+    }
+
+    const arrayBufferStart = _now()
+    const buffer = await response.arrayBuffer()
+    console.info(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: arrayBuffer() complete (${buffer.byteLength} bytes, took ${(_now() - arrayBufferStart).toFixed(1)}ms)`)
+    console.info(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: COMPLETE (total ${(_now() - t0).toFixed(1)}ms)`)
+    return buffer
   }
 }
 

@@ -37,7 +37,7 @@
     "pglite-server": "./dist/scripts/server.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
     "check:exports": "attw . --pack --profile node16",
     "lint": "eslint ./src ./tests --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write ./src ./tests",
@@ -46,7 +46,8 @@
     "test": "vitest",
     "example:basic-server": "tsx examples/basic-server.ts",
     "pglite-server:dev": "tsx --watch src/scripts/server.ts",
-    "prepublishOnly": "pnpm check:exports"
+    "prepublishOnly": "pnpm check:exports",
+    "build:original": "tsup"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.1",

@@ -25,7 +25,7 @@
     "directory": "packages/pglite-vue"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
     "check:exports": "attw . --pack --profile node16",
     "test-v2": "vue-demi-switch 2 vue2 && vitest",
     "test-v2.7": "vue-demi-switch 2.7 vue2.7 && vitest",
@@ -35,7 +35,8 @@
     "format": "prettier --write ./src ./test",
     "typecheck": "tsc",
     "stylecheck": "eslint ./src ./test && prettier --check ./src ./test",
-    "prepublishOnly": "pnpm check:exports"
+    "prepublishOnly": "pnpm check:exports",
+    "build:original": "tsup"
   },
   "types": "dist/index.d.ts",
   "module": "dist/index.js",

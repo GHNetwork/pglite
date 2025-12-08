@@ -26,7 +26,7 @@
     "directory": "packages/pglite-sync"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
     "check:exports": "attw . --pack --profile node16",
     "test": "vitest",
     "test:e2e:up": "docker compose -f test-e2e/docker_compose.yaml up -d",
@@ -38,7 +38,8 @@
     "format": "prettier --write ./src ./test",
     "typecheck": "tsc",
     "stylecheck": "pnpm lint && prettier --check ./src ./test",
-    "prepublishOnly": "pnpm check:exports"
+    "prepublishOnly": "pnpm check:exports",
+    "build:original": "tsup"
   },
   "types": "dist/index.d.ts",
   "main": "dist/index.cjs",

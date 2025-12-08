@@ -38,12 +38,13 @@
     "dev": "vite",
     "build:react": "tsc && vite build",
     "build:webcomp": "vite build --config vite.webcomp.config.ts",
-    "build": "pnpm run build:react && pnpm run build:webcomp",
+    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
     "lint": "eslint ./**/*.{ts,tsx} --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "format": "prettier --write ./src && prettier --write ./src-webcomponent",
     "typecheck": "tsc --noEmit",
-    "stylecheck": "pnpm lint && prettier -c ./src"
+    "stylecheck": "pnpm lint && prettier -c ./src",
+    "build:original": "pnpm run build:react && pnpm run build:webcomp"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.18.1",

@@ -1,0 +1,6 @@
+
+
+> @electric-sql/pglite-vue@0.2.32 build /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite-vue
+> echo "[NMT] Build skipped - using pre-built dist/"
+
+[NMT] Build skipped - using pre-built dist/

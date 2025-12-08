@@ -19,14 +19,15 @@
     "directory": "packages/pg-protocol"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
     "check:exports": "attw . --pack --profile node16",
     "test": "vitest",
     "lint": "eslint ./src ./test",
     "format": "prettier --write ./src ./test",
     "typecheck": "tsc",
     "stylecheck": "eslint ./src ./test && prettier --check ./src ./test",
-    "prepublishOnly": "pnpm check:exports"
+    "prepublishOnly": "pnpm check:exports",
+    "build:original": "tsup"
   },
   "types": "dist/index.d.ts",
   "main": "dist/index.cjs",

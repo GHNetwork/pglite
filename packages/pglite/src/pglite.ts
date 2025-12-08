@@ -203,11 +203,28 @@ export class PGlite
    * @returns A promise that resolves when the database is ready
    */
   async #init(options: PGliteOptions) {
+    // =============================================================================
+    // DIAGNOSTIC LOGGING (Phase 1)
+    // =============================================================================
+    const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+    const t0 = _now()
+    const stamp = () => `+${(_now() - t0).toFixed(1)}ms`
+
+    const dataDirInfo = options.dataDir ?? 'memory://'
+    const backend = options.fs ? 'custom-fs' : (options.dataDir?.split('://')[0] ?? 'memory')
+    console.info(`[PGliteInternal][init] ${stamp()} ========== PGlite #init START ==========`)
+    console.info(`[PGliteInternal][init] ${stamp()} dataDir=${dataDirInfo}, backend=${backend}, hasWasmModule=${!!options.wasmModule}, hasFsBundle=${!!options.fsBundle}`)
+
     if (options.fs) {
       this.fs = options.fs
+      console.debug(`[PGliteInternal][init] ${stamp()} using provided filesystem instance`)
     } else {
+      console.debug(`[PGliteInternal][init] ${stamp()} parsing dataDir and loading filesystem...`)
+      const fsLoadStart = _now()
       const { dataDir, fsType } = parseDataDir(options.dataDir)
+      console.debug(`[PGliteInternal][init] ${stamp()} parseDataDir result: dataDir=${dataDir}, fsType=${fsType}`)
       this.fs = await loadFs(dataDir, fsType)
+      console.debug(`[PGliteInternal][init] ${stamp()} loadFs completed (took ${(_now() - fsLoadStart).toFixed(1)}ms)`)
     }
 
     const extensionBundlePromises: Record<string, Promise<Blob | null>> = {}
@@ -226,7 +243,10 @@ export class PGlite
 
     if (!options.wasmModule) {
       // Start the wasm download in the background so it's ready when we need it
+      console.debug(`[PGliteInternal][init] ${stamp()} calling startWasmDownload() (no wasmModule provided)`)
       startWasmDownload()
+    } else {
+      console.debug(`[PGliteInternal][init] ${stamp()} wasmModule provided, skipping startWasmDownload()`)
     }
 
     // Get the fs bundle
@@ -235,12 +255,14 @@ export class PGlite
     // It's resolved value `fsBundleBuffer` is set and used in `getPreloadedPackage`
     // which is called via `PostgresModFactory` after we have awaited
     // `fsBundleBufferPromise` below.
+    console.debug(`[PGliteInternal][init] ${stamp()} creating fsBundleBufferPromise (source=${options.fsBundle ? 'provided fsBundle' : 'getFsBundle()'})`)
     const fsBundleBufferPromise = options.fsBundle
       ? options.fsBundle.arrayBuffer()
       : getFsBundle()
     let fsBundleBuffer: ArrayBuffer
     fsBundleBufferPromise.then((buffer) => {
       fsBundleBuffer = buffer
+      console.debug(`[PGliteInternal][init] ${stamp()} fsBundleBuffer resolved in background (${buffer.byteLength} bytes)`)
     })
 
     let emscriptenOpts: Partial<PostgresMod> = {
@@ -336,11 +358,14 @@ export class PGlite
       ],
     }
 
+    console.debug(`[PGliteInternal][init] ${stamp()} calling this.fs.init()...`)
+    const fsInitStart = _now()
     const { emscriptenOpts: amendedEmscriptenOpts } = await this.fs!.init(
       this,
       emscriptenOpts,
     )
     emscriptenOpts = amendedEmscriptenOpts
+    console.debug(`[PGliteInternal][init] ${stamp()} this.fs.init() completed (took ${(_now() - fsInitStart).toFixed(1)}ms)`)
 
     // # Setup extensions
     // This is the first step of loading PGlite extensions
@@ -350,6 +375,9 @@ export class PGlite
     // - namespaceObj: The namespace object to attach to the PGlite instance
     // - init: A function to initialize the extension/plugin after the database is ready
     // - close: A function to close/tidy-up the extension/plugin when the database is closed
+    const extensionCount = Object.keys(this.#extensions).length
+    console.debug(`[PGliteInternal][init] ${stamp()} setting up ${extensionCount} extension(s)...`)
+    const extensionsSetupStart = _now()
     for (const [extName, ext] of Object.entries(this.#extensions)) {
       if (ext instanceof URL) {
         // Extension with only a URL to a bundle
@@ -378,13 +406,20 @@ export class PGlite
       }
     }
     emscriptenOpts['pg_extensions'] = extensionBundlePromises
+    console.debug(`[PGliteInternal][init] ${stamp()} extensions setup completed (took ${(_now() - extensionsSetupStart).toFixed(1)}ms)`)
 
     // Await the fs bundle - we do this just before calling PostgresModFactory
     // as it needs the fs bundle to be ready.
+    console.debug(`[PGliteInternal][init] ${stamp()} awaiting fsBundleBufferPromise...`)
+    const fsBundleAwaitStart = _now()
     await fsBundleBufferPromise
+    console.info(`[PGliteInternal][init] ${stamp()} fsBundleBufferPromise resolved (waited ${(_now() - fsBundleAwaitStart).toFixed(1)}ms)`)
 
     // Load the database engine
+    console.debug(`[PGliteInternal][init] ${stamp()} calling PostgresModFactory()...`)
+    const postgresModStart = _now()
     this.mod = await PostgresModFactory(emscriptenOpts)
+    console.info(`[PGliteInternal][init] ${stamp()} PostgresModFactory() completed (took ${(_now() - postgresModStart).toFixed(1)}ms)`)
 
     // set the write callback
     this.#pglite_write = this.mod.addFunction((ptr: any, length: number) => {
@@ -447,36 +482,54 @@ export class PGlite
     }, 'iii')
 
     this.mod._set_read_write_cbs(this.#pglite_read, this.#pglite_write)
+    console.debug(`[PGliteInternal][init] ${stamp()} read/write callbacks registered`)
 
     // Sync the filesystem from any previous store
+    console.debug(`[PGliteInternal][init] ${stamp()} calling initialSyncFs()...`)
+    const initialSyncStart = _now()
     await this.fs!.initialSyncFs()
+    console.debug(`[PGliteInternal][init] ${stamp()} initialSyncFs() completed (took ${(_now() - initialSyncStart).toFixed(1)}ms)`)
 
     // If the user has provided a tarball to load the database from, do that now.
     // We do this after the initial sync so that we can throw if the database
     // already exists.
     if (options.loadDataDir) {
       if (this.mod.FS.analyzePath(PGDATA + '/PG_VERSION').exists) {
+        console.error(`[PGliteInternal][init] ${stamp()} ERROR: Database already exists, cannot load from tarball`)
         throw new Error('Database already exists, cannot load from tarball')
       }
       this.#log('pglite: loading data from tarball')
+      console.debug(`[PGliteInternal][init] ${stamp()} loading data from tarball...`)
+      const loadTarStart = _now()
       await loadTar(this.mod.FS, options.loadDataDir, PGDATA)
+      console.debug(`[PGliteInternal][init] ${stamp()} loadTar() completed (took ${(_now() - loadTarStart).toFixed(1)}ms)`)
     }
 
     // Check and log if the database exists
-    if (this.mod.FS.analyzePath(PGDATA + '/PG_VERSION').exists) {
+    const dbExists = this.mod.FS.analyzePath(PGDATA + '/PG_VERSION').exists
+    if (dbExists) {
       this.#log('pglite: found DB, resuming')
+      console.debug(`[PGliteInternal][init] ${stamp()} found existing database at ${PGDATA}`)
     } else {
       this.#log('pglite: no db')
+      console.debug(`[PGliteInternal][init] ${stamp()} no existing database found, will initialize new database`)
     }
 
     // Start compiling dynamic extensions present in FS.
+    console.debug(`[PGliteInternal][init] ${stamp()} calling loadExtensions()...`)
+    const loadExtStart = _now()
     await loadExtensions(this.mod, (...args) => this.#log(...args))
+    console.debug(`[PGliteInternal][init] ${stamp()} loadExtensions() completed (took ${(_now() - loadExtStart).toFixed(1)}ms)`)
 
     // Initialize the database
+    console.debug(`[PGliteInternal][init] ${stamp()} calling _pgl_initdb()...`)
+    const initdbStart = _now()
     const idb = this.mod._pgl_initdb()
+    console.info(`[PGliteInternal][init] ${stamp()} _pgl_initdb() completed (took ${(_now() - initdbStart).toFixed(1)}ms, result=0b${idb.toString(2).padStart(4, '0')})`)
 
     if (!idb) {
       // This would be a sab worker crash before pg_initdb can be called
+      console.error(`[PGliteInternal][init] ${stamp()} ERROR: INITDB failed to return value`)
       throw new Error('INITDB failed to return value')
     }
 
@@ -490,6 +543,7 @@ export class PGlite
 
     if (idb & 0b0001) {
       // this would be a wasm crash inside pg_initdb from a sab worker.
+      console.error(`[PGliteInternal][init] ${stamp()} ERROR: INITDB failed to execute (idb & 0b0001)`)
       throw new Error('INITDB: failed to execute')
     } else if (idb & 0b0010) {
       // initdb was called to init PGDATA if required
@@ -499,8 +553,10 @@ export class PGlite
         // initdb has found a previous database
         if (idb & (0b0100 | 0b1000)) {
           // initdb found db+user, and we switched to that user
+          console.debug(`[PGliteInternal][init] ${stamp()} initdb found existing db+user, switched successfully`)
         } else {
           // TODO: invalid user for db?
+          console.error(`[PGliteInternal][init] ${stamp()} ERROR: Invalid db/user combination: ${pgdatabase}/${pguser}`)
           throw new Error(
             `INITDB: Invalid db ${pgdatabase}/user ${pguser} combination`,
           )
@@ -508,8 +564,10 @@ export class PGlite
       } else {
         // initdb has created a new database for us, we can only continue if we are
         // in template1 and the user is postgres
+        console.debug(`[PGliteInternal][init] ${stamp()} initdb created new database`)
         if (pgdatabase !== 'template1' && pguser !== 'postgres') {
           // throw new Error(`Invalid database ${pgdatabase} requested`);
+          console.error(`[PGliteInternal][init] ${stamp()} ERROR: Created new datadir but alternative db/user requested: ${pgdatabase}/${pguser}`)
           throw new Error(
             `INITDB: created a new datadir ${PGDATA}, but an alternative db ${pgdatabase}/user ${pguser} was requested`,
           )
@@ -518,24 +576,42 @@ export class PGlite
     }
 
     // (re)start backed after possible initdb boot/single.
+    console.debug(`[PGliteInternal][init] ${stamp()} calling _pgl_backend()...`)
+    const backendStart = _now()
     this.mod._pgl_backend()
+    console.debug(`[PGliteInternal][init] ${stamp()} _pgl_backend() completed (took ${(_now() - backendStart).toFixed(1)}ms)`)
 
     // Sync any changes back to the persisted store (if there is one)
     // TODO: only sync here if initdb did init db.
+    console.debug(`[PGliteInternal][init] ${stamp()} calling syncToFs()...`)
+    const syncToFsStart = _now()
     await this.syncToFs()
+    console.debug(`[PGliteInternal][init] ${stamp()} syncToFs() completed (took ${(_now() - syncToFsStart).toFixed(1)}ms)`)
 
     this.#ready = true
+    console.info(`[PGliteInternal][init] ${stamp()} database ready flag set`)
 
     // Set the search path to public for this connection
+    console.debug(`[PGliteInternal][init] ${stamp()} setting search_path to public...`)
     await this.exec('SET search_path TO public;')
+    console.debug(`[PGliteInternal][init] ${stamp()} search_path set`)
 
     // Init array types
+    console.debug(`[PGliteInternal][init] ${stamp()} initializing array types...`)
+    const arrayTypesStart = _now()
     await this._initArrayTypes()
+    console.debug(`[PGliteInternal][init] ${stamp()} array types initialized (took ${(_now() - arrayTypesStart).toFixed(1)}ms)`)
 
     // Init extensions
+    console.debug(`[PGliteInternal][init] ${stamp()} running ${extensionInitFns.length} extension init function(s)...`)
+    const extInitStart = _now()
     for (const initFn of extensionInitFns) {
       await initFn()
     }
+    console.debug(`[PGliteInternal][init] ${stamp()} extension init functions completed (took ${(_now() - extInitStart).toFixed(1)}ms)`)
+
+    const totalElapsed = (_now() - t0).toFixed(1)
+    console.info(`[PGliteInternal][init] ${stamp()} ========== PGlite #init COMPLETE (total ${totalElapsed}ms) ==========`)
   }
 
   /**

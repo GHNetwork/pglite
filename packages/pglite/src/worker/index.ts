@@ -104,7 +104,20 @@ export class PGliteWorker
   }
 
   async #init(options: PGliteWorkerOptions = {}) {
+    // =============================================================================
+    // DIAGNOSTIC LOGGING (Phase 1 - main thread side of worker)
+    // =============================================================================
+    const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+    const t0 = _now()
+    const stamp = () => `+${(_now() - t0).toFixed(1)}ms`
+
+    console.info(`[PGliteInternal][worker-main] ${stamp()} ========== PGliteWorker #init START ==========`)
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} tabId=${this.#tabId}, dataDir=${options.dataDir ?? 'memory://'}`)
+
     // Setup the extensions
+    const extensionCount = Object.keys(this.#extensions).length
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} setting up ${extensionCount} extension(s) on client side...`)
+    const extSetupStart = _now()
     for (const [extName, ext] of Object.entries(this.#extensions)) {
       if (ext instanceof URL) {
         throw new Error(
@@ -134,35 +147,49 @@ export class PGliteWorker
         }
       }
     }
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} extensions setup completed (took ${(_now() - extSetupStart).toFixed(1)}ms)`)
 
     // Wait for the worker let us know it's here
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} awaiting workerHerePromise (waiting for worker to post 'here')...`)
+    const hereWaitStart = _now()
     await this.#workerHerePromise
+    console.info(`[PGliteInternal][worker-main] ${stamp()} workerHerePromise resolved (waited ${(_now() - hereWaitStart).toFixed(1)}ms)`)
 
     // Send the worker the options
     const { extensions: _, ...workerOptions } = options
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} posting 'init' message to worker with options`)
     this.#workerProcess.postMessage({
       type: 'init',
       options: workerOptions,
     })
 
     // Wait for the worker let us know it's ready
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} awaiting workerReadyPromise (waiting for worker to post 'ready')...`)
+    const readyWaitStart = _now()
     await this.#workerReadyPromise
+    console.info(`[PGliteInternal][worker-main] ${stamp()} workerReadyPromise resolved (waited ${(_now() - readyWaitStart).toFixed(1)}ms, workerID=${this.#workerID})`)
 
     // Acquire the tab close lock, this is released then the tab, or this
     // PGliteWorker instance, is closed
     const tabCloseLockId = `pglite-tab-close:${this.#tabId}`
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} acquiring tab close lock: ${tabCloseLockId}`)
+    const tabLockStart = _now()
     this.#releaseTabCloseLock = await acquireLock(tabCloseLockId)
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} tab close lock acquired (took ${(_now() - tabLockStart).toFixed(1)}ms)`)
 
     // Start the broadcast channel used to communicate with tabs and leader election
     const broadcastChannelId = `pglite-broadcast:${this.#workerID}`
     this.#broadcastChannel = new BroadcastChannel(broadcastChannelId)
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} broadcast channel created: ${broadcastChannelId}`)
 
     // Start the tab channel used to communicate with the leader directly
     const tabChannelId = `pglite-tab:${this.#tabId}`
     this.#tabChannel = new BroadcastChannel(tabChannelId)
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} tab channel created: ${tabChannelId}`)
 
     this.#broadcastChannel.addEventListener('message', async (event) => {
       if (event.data.type === 'leader-here') {
+        console.debug(`[PGliteInternal][worker-main] received 'leader-here' on broadcast channel`)
         this.#connected = false
         this.#eventTarget.dispatchEvent(new Event('leader-change'))
         this.#leaderNotifyLoop()
@@ -173,26 +200,34 @@ export class PGliteWorker
 
     this.#tabChannel.addEventListener('message', async (event) => {
       if (event.data.type === 'connected') {
+        console.info(`[PGliteInternal][worker-main] ${stamp()} received 'connected' on tab channel - connection established!`)
         this.#connected = true
         this.#eventTarget.dispatchEvent(new Event('connected'))
         this.#debug = await this.#rpc('getDebugLevel')
         this.#ready = true
+        console.info(`[PGliteInternal][worker-main] ${stamp()} ready flag set, debug level=${this.#debug}`)
       }
     })
 
     this.#workerProcess.addEventListener('message', async (event) => {
       if (event.data.type === 'leader-now') {
+        console.info(`[PGliteInternal][worker-main] ${stamp()} received 'leader-now' - this tab is the leader`)
         this.#isLeader = true
         this.#eventTarget.dispatchEvent(new Event('leader-change'))
       }
     })
 
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} starting leader notify loop`)
     this.#leaderNotifyLoop()
 
     // Init array types
     // We don't await this as it will result in a deadlock
     // It immediately takes out the transaction lock as so another query
+    console.debug(`[PGliteInternal][worker-main] ${stamp()} initiating _initArrayTypes() (not awaited)`)
     this._initArrayTypes()
+
+    const totalElapsed = (_now() - t0).toFixed(1)
+    console.info(`[PGliteInternal][worker-main] ${stamp()} ========== PGliteWorker #init COMPLETE (total ${totalElapsed}ms) ==========`)
   }
 
   async #leaderNotifyLoop() {
@@ -495,10 +530,22 @@ export interface WorkerOptions {
 }
 
 export async function worker({ init }: WorkerOptions) {
+  // =============================================================================
+  // DIAGNOSTIC LOGGING (Phase 1 - worker thread side)
+  // =============================================================================
+  const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+  const t0 = _now()
+  const stamp = () => `+${(_now() - t0).toFixed(1)}ms`
+
+  console.info(`[PGliteInternal][worker-thread] ${stamp()} ========== worker() START ==========`)
+
   // Send a message to the main thread to let it know we are here
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} posting 'here' message to main thread`)
   postMessage({ type: 'here' })
 
   // Await the main thread to send us the options
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} waiting for 'init' message from main thread...`)
+  const initWaitStart = _now()
   const options = await new Promise<Exclude<PGliteWorkerOptions, 'extensions'>>(
     (resolve) => {
       addEventListener(
@@ -512,27 +559,36 @@ export async function worker({ init }: WorkerOptions) {
       )
     },
   )
+  console.info(`[PGliteInternal][worker-thread] ${stamp()} received 'init' message (waited ${(_now() - initWaitStart).toFixed(1)}ms, dataDir=${options.dataDir ?? 'memory://'})`)
 
   // ID for this multi-tab worker - this is used to identify the group of workers
   // that are trying to elect a leader for a shared PGlite instance.
   // It defaults to the URL of the worker, and the dataDir if provided
   // but can be overridden by the options.
   const id = options.id ?? `${import.meta.url}:${options.dataDir ?? ''}`
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} worker id=${id}`)
 
   // Let the main thread know we are ready
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} posting 'ready' message to main thread`)
   postMessage({ type: 'ready', id })
 
   const electionLockId = `pglite-election-lock:${id}`
   const broadcastChannelId = `pglite-broadcast:${id}`
   const broadcastChannel = new BroadcastChannel(broadcastChannelId)
   const connectedTabs = new Set<string>()
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} broadcast channel created: ${broadcastChannelId}`)
 
   // Await the main lock which is used to elect the leader
   // We don't release this lock, its automatically released when the worker or
   // tab is closed
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} acquiring election lock: ${electionLockId}...`)
+  const lockWaitStart = _now()
   await acquireLock(electionLockId)
+  console.info(`[PGliteInternal][worker-thread] ${stamp()} election lock acquired - THIS WORKER IS NOW LEADER (waited ${(_now() - lockWaitStart).toFixed(1)}ms)`)
 
   // Now we are the leader, start the worker
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} calling init(options) to create PGlite instance...`)
+  const dbInitStart = _now()
   const dbPromise = init(options)
 
   // Start listening for messages from tabs
@@ -541,29 +597,45 @@ export async function worker({ init }: WorkerOptions) {
     switch (msg.type) {
       case 'tab-here':
         // A new tab has joined,
+        console.debug(`[PGliteInternal][worker-thread] received 'tab-here' from tab ${msg.id}`)
         connectTab(msg.id, await dbPromise, connectedTabs)
         break
     }
   }
 
   // Notify the other tabs that we are the leader
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} posting 'leader-here' to broadcast channel`)
   broadcastChannel.postMessage({ type: 'leader-here', id })
 
   // Let the main thread know we are the leader
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} posting 'leader-now' to main thread`)
   postMessage({ type: 'leader-now' })
 
+  console.debug(`[PGliteInternal][worker-thread] ${stamp()} awaiting dbPromise (PGlite initialization)...`)
   const db = await dbPromise
+  console.info(`[PGliteInternal][worker-thread] ${stamp()} dbPromise resolved - PGlite instance ready (took ${(_now() - dbInitStart).toFixed(1)}ms)`)
 
   // Listen for notifications and broadcast them to all tabs
   db.onNotification((channel, payload) => {
     broadcastChannel.postMessage({ type: 'notify', channel, payload })
   })
+
+  const totalElapsed = (_now() - t0).toFixed(1)
+  console.info(`[PGliteInternal][worker-thread] ${stamp()} ========== worker() COMPLETE (total ${totalElapsed}ms) ==========`)
 }
 
+// Track first RPC call for diagnostic purposes
+let firstRpcHandled = false
+
 function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
+  const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+
   if (connectedTabs.has(tabId)) {
+    console.debug(`[PGliteInternal][worker-thread] connectTab: tab ${tabId} already connected, skipping`)
     return
   }
+
+  console.debug(`[PGliteInternal][worker-thread] connectTab: connecting tab ${tabId}`)
   connectedTabs.add(tabId)
   const tabChannelId = `pglite-tab:${tabId}`
   const tabCloseLockId = `pglite-tab-close:${tabId}`
@@ -573,6 +645,7 @@ function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
   navigator.locks.request(tabCloseLockId, () => {
     return new Promise<void>((resolve) => {
       // The tab has been closed, unsubscribe the tab broadcast channel
+      console.debug(`[PGliteInternal][worker-thread] tab ${tabId} closed, cleaning up`)
       tabChannel.close()
       connectedTabs.delete(tabId)
       resolve()
@@ -585,8 +658,16 @@ function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
     const msg = event.data
     switch (msg.type) {
       case 'rpc-call': {
-        await pg.waitReady
+        const rpcStart = _now()
         const { callId, method, args } = msg as WorkerRpcCall<WorkerRpcMethod>
+
+        // Log first RPC call as a milestone
+        if (!firstRpcHandled) {
+          console.info(`[PGliteInternal][worker-thread] FIRST RPC CALL: method=${method}, callId=${callId}`)
+        }
+
+        await pg.waitReady
+
         try {
           // @ts-ignore no apparent reason why it fails
           const result = (await api[method](...args)) as WorkerRpcResult<
@@ -597,6 +678,11 @@ function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
             callId,
             result,
           } satisfies WorkerRpcResult<typeof method>)
+
+          if (!firstRpcHandled) {
+            console.info(`[PGliteInternal][worker-thread] FIRST RPC CALL COMPLETE: method=${method}, took ${(_now() - rpcStart).toFixed(1)}ms`)
+            firstRpcHandled = true
+          }
         } catch (error) {
           console.error(error)
           tabChannel.postMessage({
@@ -611,6 +697,7 @@ function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
   })
 
   // Send a message to the tab to let it know it's connected
+  console.debug(`[PGliteInternal][worker-thread] posting 'connected' to tab ${tabId}`)
   tabChannel.postMessage({ type: 'connected' })
 }
 

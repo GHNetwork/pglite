@@ -1,0 +1,6 @@
+
+
+> @electric-sql/pg-protocol@0.0.4 build /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pg-protocol
+> echo "[NMT] Build skipped - using pre-built dist/"
+
+[NMT] Build skipped - using pre-built dist/

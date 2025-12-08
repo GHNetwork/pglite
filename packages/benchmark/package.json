@@ -6,11 +6,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "rm -rf ./dist && mkdir dist && cp -r src/* dist/ && mkdir dist/wa-sqlite && cp -r ./node_modules/wa-sqlite/* dist/wa-sqlite && mkdir dist/pglite && cp -r ../pglite/dist/* dist/pglite",
+    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
-    "stylecheck": "pnpm lint && prettier --check ."
+    "stylecheck": "pnpm lint && prettier --check .",
+    "build:original": "rm -rf ./dist && mkdir dist && cp -r src/* dist/ && mkdir dist/wa-sqlite && cp -r ./node_modules/wa-sqlite/* dist/wa-sqlite && mkdir dist/pglite && cp -r ../pglite/dist/* dist/pglite"
   },
   "keywords": [],
   "author": "Electric DB Limited",

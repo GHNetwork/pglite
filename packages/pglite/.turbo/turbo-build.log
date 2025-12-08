@@ -1,0 +1,6 @@
+
+
+> @electric-sql/pglite@0.3.14 build /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite
+> echo "[NMT] Build skipped - using pre-built dist/"
+
+[NMT] Build skipped - using pre-built dist/
