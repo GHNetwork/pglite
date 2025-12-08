@@ -165,7 +165,7 @@
     "format": "prettier --write ./src ./tests",
     "typecheck": "tsc --noEmit",
     "stylecheck": "pnpm lint && prettier --check ./src ./tests",
-    "prepublishOnly": "pnpm check:exports"
+    "prepublishOnly": "echo 'ERROR: This is a forked package for NMT Pathways. DO NOT publish to npm!' && exit 1"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.1",
