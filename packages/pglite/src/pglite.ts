@@ -704,7 +704,7 @@ export class PGlite
     if (!this.#queryWriteChunks) {
       return undefined
     }
-    const blob = new Blob(this.#queryWriteChunks)
+    const blob = new Blob(this.#queryWriteChunks as BlobPart[])
     this.#queryWriteChunks = undefined
     return blob
   }

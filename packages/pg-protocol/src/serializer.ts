@@ -140,7 +140,7 @@ const writeValues = (values: LegalValue[], valueMapper?: ValueMapper): void => {
       ArrayBuffer.isView(mappedVal)
     ) {
       const buffer = ArrayBuffer.isView(mappedVal)
-        ? mappedVal.buffer.slice(
+        ? (mappedVal.buffer as ArrayBuffer).slice(
             mappedVal.byteOffset,
             mappedVal.byteOffset + mappedVal.byteLength,
           )

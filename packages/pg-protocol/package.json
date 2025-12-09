@@ -19,7 +19,7 @@
     "directory": "packages/pg-protocol"
   },
   "scripts": {
-    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
+    "build": "tsup",
     "check:exports": "attw . --pack --profile node16",
     "test": "vitest",
     "lint": "eslint ./src ./test",
