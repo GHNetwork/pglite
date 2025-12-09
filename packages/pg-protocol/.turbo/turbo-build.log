@@ -11,20 +11,20 @@
 [34mCLI[39m Cleaning output folder
 [34mCJS[39m Build start
 [34mESM[39m Build start
+[32mCJS[39m [1mdist/index.cjs        [22m[32m13.34 KB[39m
+[32mCJS[39m [1mdist/messages.cjs     [22m[32m3.71 KB[39m
+[32mCJS[39m [1mdist/index.cjs.map    [22m[32m58.07 KB[39m
+[32mCJS[39m [1mdist/messages.cjs.map [22m[32m11.69 KB[39m
+[32mCJS[39m ⚡️ Build success in 78ms
 [32mESM[39m [1mdist/index.js              [22m[32m9.89 KB[39m
 [32mESM[39m [1mdist/messages.js           [22m[32m893.00 B[39m
 [32mESM[39m [1mdist/chunk-REUDAHVV.js     [22m[32m3.53 KB[39m
+[32mESM[39m [1mdist/index.js.map          [22m[32m46.18 KB[39m
 [32mESM[39m [1mdist/messages.js.map       [22m[32m71.00 B[39m
 [32mESM[39m [1mdist/chunk-REUDAHVV.js.map [22m[32m11.66 KB[39m
-[32mESM[39m [1mdist/index.js.map          [22m[32m46.18 KB[39m
-[32mESM[39m ⚡️ Build success in 62ms
-[32mCJS[39m [1mdist/messages.cjs     [22m[32m3.71 KB[39m
-[32mCJS[39m [1mdist/index.cjs        [22m[32m13.34 KB[39m
-[32mCJS[39m [1mdist/messages.cjs.map [22m[32m11.69 KB[39m
-[32mCJS[39m [1mdist/index.cjs.map    [22m[32m58.07 KB[39m
-[32mCJS[39m ⚡️ Build success in 66ms
+[32mESM[39m ⚡️ Build success in 83ms
 DTS Build start
-DTS ⚡️ Build success in 2851ms
+DTS ⚡️ Build success in 2924ms
 DTS dist/index.d.cts             1.73 KB
 DTS dist/messages.d.cts          762.00 B
 DTS dist/messages-CaXcfh5Z.d.cts 12.65 KB

@@ -22,7 +22,7 @@
 [34mESM[39m Build start
 [34mCJS[39m Build start
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m11:21:07 PM[39m
+[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                            [90m4:48:35 PM[39m
 
     release/pglite.js:9:90760:
 [37m      9 │ ...${body} };`;ASM_CONSTS[start]=[32meval[37m(func)}if("__start_em_asm"in m...
@@ -33,7 +33,7 @@
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m11:21:07 PM[39m
+[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                            [90m4:48:35 PM[39m
 
     release/pglite.js:9:91251:
 [37m      9 │ ...${body};`;moduleExports[name]=[32meval[37m(func)}for(var name in moduleE...
@@ -44,10 +44,10 @@
 
 
 [32mCJS[39m [1mdist/pglite.cjs [22m[32m343.12 KB[39m
-[32mCJS[39m ⚡️ Build success in 670ms
+[32mCJS[39m ⚡️ Build success in 511ms
 DTS Build start
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m11:21:07 PM[39m
+[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                            [90m4:48:36 PM[39m
 
     release/pglite.js:9:90760:
 [37m      9 │ ...${body} };`;ASM_CONSTS[start]=[32meval[37m(func)}if("__start_em_asm"in m...
@@ -58,7 +58,7 @@ DTS Build start
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m11:21:07 PM[39m
+[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                            [90m4:48:36 PM[39m
 
     release/pglite.js:9:91251:
 [37m      9 │ ...${body};`;moduleExports[name]=[32meval[37m(func)}for(var name in moduleE...
@@ -69,7 +69,7 @@ DTS Build start
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m11:21:07 PM[39m
+[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                            [90m4:48:36 PM[39m
 
     release/pglite.js:9:90760:
 [37m      9 │ ...${body} };`;ASM_CONSTS[start]=[32meval[37m(func)}if("__start_em_asm"in m...
@@ -80,7 +80,7 @@ DTS Build start
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m11:21:07 PM[39m
+[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                            [90m4:48:36 PM[39m
 
     release/pglite.js:9:91251:
 [37m      9 │ ...${body};`;moduleExports[name]=[32meval[37m(func)}for(var name in moduleE...
@@ -124,9 +124,11 @@ DTS Build start
 [32mESM[39m [1mdist/contrib/fuzzystrmatch.js       [22m[32m242.00 B[39m
 [32mESM[39m [1mdist/contrib/hstore.js              [22m[32m214.00 B[39m
 [32mESM[39m [1mdist/contrib/intarray.js            [22m[32m222.00 B[39m
-[32mESM[39m [1mdist/chunk-S2MCHI4U.js              [22m[32m4.11 KB[39m
+[32mESM[39m [1mdist/index.js                       [22m[32m352.80 KB[39m
+[32mESM[39m [1mdist/chunk-AX2J2225.js              [22m[32m4.11 KB[39m
 [32mESM[39m [1mdist/chunk-5L2AN65G.js              [22m[32m14.58 KB[39m
-[32mESM[39m [1mdist/chunk-3RILSHSC.js              [22m[32m23.66 KB[39m
+[32mESM[39m [1mdist/chunk-YMWB5NPP.js              [22m[32m24.00 KB[39m
+[32mESM[39m [1mdist/templating.js                  [22m[32m161.00 B[39m
 [32mESM[39m [1mdist/chunk-MFIGESQR.js              [22m[32m998.00 B[39m
 [32mESM[39m [1mdist/contrib/amcheck.js             [22m[32m218.00 B[39m
 [32mESM[39m [1mdist/contrib/auto_explain.js        [22m[32m238.00 B[39m
@@ -135,8 +137,6 @@ DTS Build start
 [32mESM[39m [1mdist/contrib/btree_gist.js          [22m[32m230.00 B[39m
 [32mESM[39m [1mdist/contrib/citext.js              [22m[32m214.00 B[39m
 [32mESM[39m [1mdist/chunk-LXLR7NCL.js              [22m[32m1.36 KB[39m
-[32mESM[39m [1mdist/index.js                       [22m[32m353.43 KB[39m
-[32mESM[39m [1mdist/templating.js                  [22m[32m161.00 B[39m
 [32mESM[39m [1mdist/vector/index.js.map            [22m[32m685.00 B[39m
 [32mESM[39m [1mdist/worker/index.js.map            [22m[32m43.60 KB[39m
 [32mESM[39m [1mdist/contrib/uuid_ossp.js.map       [22m[32m670.00 B[39m
@@ -171,9 +171,10 @@ DTS Build start
 [32mESM[39m [1mdist/contrib/fuzzystrmatch.js.map   [22m[32m692.00 B[39m
 [32mESM[39m [1mdist/contrib/hstore.js.map          [22m[32m655.00 B[39m
 [32mESM[39m [1mdist/contrib/intarray.js.map        [22m[32m665.00 B[39m
-[32mESM[39m [1mdist/chunk-S2MCHI4U.js.map          [22m[32m22.05 KB[39m
+[32mESM[39m [1mdist/chunk-AX2J2225.js.map          [22m[32m22.05 KB[39m
 [32mESM[39m [1mdist/chunk-5L2AN65G.js.map          [22m[32m66.43 KB[39m
-[32mESM[39m [1mdist/chunk-3RILSHSC.js.map          [22m[32m96.30 KB[39m
+[32mESM[39m [1mdist/chunk-YMWB5NPP.js.map          [22m[32m98.99 KB[39m
+[32mESM[39m [1mdist/templating.js.map              [22m[32m71.00 B[39m
 [32mESM[39m [1mdist/chunk-MFIGESQR.js.map          [22m[32m6.57 KB[39m
 [32mESM[39m [1mdist/contrib/amcheck.js.map         [22m[32m660.00 B[39m
 [32mESM[39m [1mdist/contrib/auto_explain.js.map    [22m[32m685.00 B[39m
@@ -182,10 +183,10 @@ DTS Build start
 [32mESM[39m [1mdist/contrib/btree_gist.js.map      [22m[32m675.00 B[39m
 [32mESM[39m [1mdist/contrib/citext.js.map          [22m[32m655.00 B[39m
 [32mESM[39m [1mdist/chunk-LXLR7NCL.js.map          [22m[32m712.00 B[39m
-[32mESM[39m [1mdist/templating.js.map              [22m[32m71.00 B[39m
-[32mESM[39m [1mdist/index.js.map                   [22m[32m760.20 KB[39m
-[32mESM[39m ⚡️ Build success in 1110ms
-[32mCJS[39m [1mdist/index.cjs                       [22m[32m407.65 KB[39m
+[32mESM[39m [1mdist/index.js.map                   [22m[32m762.57 KB[39m
+[32mESM[39m ⚡️ Build success in 1095ms
+[32mCJS[39m [1mdist/index.cjs                       [22m[32m407.35 KB[39m
+[32mCJS[39m [1mdist/templating.cjs                  [22m[32m1.44 KB[39m
 [32mCJS[39m [1mdist/contrib/amcheck.cjs             [22m[32m863.00 B[39m
 [32mCJS[39m [1mdist/contrib/auto_explain.cjs        [22m[32m888.00 B[39m
 [32mCJS[39m [1mdist/contrib/bloom.cjs               [22m[32m853.00 B[39m
@@ -219,14 +220,14 @@ DTS Build start
 [32mCJS[39m [1mdist/contrib/uuid_ossp.cjs           [22m[32m873.00 B[39m
 [32mCJS[39m [1mdist/fs/base.cjs                     [22m[32m13.97 KB[39m
 [32mCJS[39m [1mdist/fs/nodefs.cjs                   [22m[32m10.66 KB[39m
+[32mCJS[39m [1mdist/fs/opfs-ahp.cjs                 [22m[32m23.84 KB[39m
 [32mCJS[39m [1mdist/live/index.cjs                  [22m[32m19.11 KB[39m
 [32mCJS[39m [1mdist/pg_ivm/index.cjs                [22m[32m874.00 B[39m
 [32mCJS[39m [1mdist/pg_uuidv7/index.cjs             [22m[32m886.00 B[39m
 [32mCJS[39m [1mdist/pgtap/index.cjs                 [22m[32m870.00 B[39m
 [32mCJS[39m [1mdist/vector/index.cjs                [22m[32m876.00 B[39m
 [32mCJS[39m [1mdist/worker/index.cjs                [22m[32m27.36 KB[39m
-[32mCJS[39m [1mdist/fs/opfs-ahp.cjs                 [22m[32m23.84 KB[39m
-[32mCJS[39m [1mdist/templating.cjs                  [22m[32m1.44 KB[39m
+[32mCJS[39m [1mdist/templating.cjs.map              [22m[32m6.72 KB[39m
 [32mCJS[39m [1mdist/contrib/amcheck.cjs.map         [22m[32m1.72 KB[39m
 [32mCJS[39m [1mdist/contrib/auto_explain.cjs.map    [22m[32m1.76 KB[39m
 [32mCJS[39m [1mdist/contrib/bloom.cjs.map           [22m[32m1.71 KB[39m
@@ -258,19 +259,18 @@ DTS Build start
 [32mCJS[39m [1mdist/contrib/tsm_system_time.cjs.map [22m[32m1.80 KB[39m
 [32mCJS[39m [1mdist/contrib/unaccent.cjs.map        [22m[32m1.73 KB[39m
 [32mCJS[39m [1mdist/contrib/uuid_ossp.cjs.map       [22m[32m1.74 KB[39m
+[32mCJS[39m [1mdist/fs/base.cjs.map                 [22m[32m65.53 KB[39m
 [32mCJS[39m [1mdist/fs/nodefs.cjs.map               [22m[32m61.12 KB[39m
+[32mCJS[39m [1mdist/fs/opfs-ahp.cjs.map             [22m[32m100.80 KB[39m
 [32mCJS[39m [1mdist/pg_ivm/index.cjs.map            [22m[32m1.74 KB[39m
 [32mCJS[39m [1mdist/pg_uuidv7/index.cjs.map         [22m[32m1.76 KB[39m
 [32mCJS[39m [1mdist/pgtap/index.cjs.map             [22m[32m1.74 KB[39m
 [32mCJS[39m [1mdist/vector/index.cjs.map            [22m[32m1.75 KB[39m
-[32mCJS[39m [1mdist/worker/index.cjs.map            [22m[32m147.73 KB[39m
-[32mCJS[39m [1mdist/fs/base.cjs.map                 [22m[32m65.53 KB[39m
-[32mCJS[39m [1mdist/fs/opfs-ahp.cjs.map             [22m[32m100.80 KB[39m
-[32mCJS[39m [1mdist/templating.cjs.map              [22m[32m6.72 KB[39m
-[32mCJS[39m [1mdist/live/index.cjs.map              [22m[32m101.29 KB[39m
-[32mCJS[39m [1mdist/index.cjs.map                   [22m[32m989.70 KB[39m
-[32mCJS[39m ⚡️ Build success in 1135ms
-DTS ⚡️ Build success in 22781ms
+[32mCJS[39m [1mdist/worker/index.cjs.map            [22m[32m150.19 KB[39m
+[32mCJS[39m [1mdist/index.cjs.map                   [22m[32m994.76 KB[39m
+[32mCJS[39m [1mdist/live/index.cjs.map              [22m[32m103.75 KB[39m
+[32mCJS[39m ⚡️ Build success in 1103ms
+DTS ⚡️ Build success in 21566ms
 DTS dist/index.d.ts                    16.97 KB
 DTS dist/fs/nodefs.d.ts                396.00 B
 DTS dist/fs/opfs-ahp.d.ts              3.77 KB

@@ -210,6 +210,68 @@ export class PGlite
     const t0 = _now()
     const stamp = () => `+${(_now() - t0).toFixed(1)}ms`
 
+    // =============================================================================
+    // [NMT CUSTOMIZATION] Stage guard helper for timeout enforcement and heartbeats
+    // =============================================================================
+    // RATIONALE: PGlite's #init pipeline can hang silently on certain browsers
+    // (especially Chrome with OPFS-AHP). Without per-stage guards, the outer
+    // waitReady timeout gives no indication of WHICH stage stalled.
+    //
+    // This helper:
+    // 1. Logs start/finish with [PGliteInternal][init][stageName] prefix
+    // 2. Emits periodic heartbeats during long-running stages
+    // 3. Enforces per-stage timeout that rejects with clear error instead of hanging
+    //
+    // See: docs/pglite-custom/pglite-fork-decision-2025-12.md (Fix 6.2)
+    // =============================================================================
+    const HEARTBEAT_INTERVAL_MS = 3000 // Emit heartbeat every 3 seconds
+    const DEFAULT_STAGE_TIMEOUT_MS = 60000 // 60 second default per-stage timeout
+
+    const withInitStageGuard = async <T>(
+      stageName: string,
+      fn: () => Promise<T>,
+      timeoutMs: number = DEFAULT_STAGE_TIMEOUT_MS,
+    ): Promise<T> => {
+      const stageStart = _now()
+      // [NMT CUSTOMIZATION] Use console.info instead of console.debug so logs survive
+      // Terser pure_funcs stripping in production builds (Nuxt strips console.debug)
+      console.info(`[PGliteInternal][init][${stageName}] ${stamp()} START`)
+
+      let heartbeatCount = 0
+      const heartbeatInterval = setInterval(() => {
+        heartbeatCount++
+        const elapsed = (_now() - stageStart).toFixed(1)
+        // [NMT CUSTOMIZATION] Use console.info for production visibility
+        console.info(`[PGliteInternal][init][${stageName}] ${stamp()} HEARTBEAT #${heartbeatCount} (stage running for ${elapsed}ms)`)
+      }, HEARTBEAT_INTERVAL_MS)
+
+      try {
+        const result = await Promise.race([
+          fn(),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              const elapsed = (_now() - stageStart).toFixed(1)
+              reject(new Error(
+                `[PGliteInternal][init][${stageName}] TIMEOUT after ${elapsed}ms (limit: ${timeoutMs}ms). ` +
+                `This stage appears to be hanging. Check browser console for preceding errors.`
+              ))
+            }, timeoutMs)
+          }),
+        ])
+
+        const elapsed = (_now() - stageStart).toFixed(1)
+        // [NMT CUSTOMIZATION] Use console.info for production visibility
+        console.info(`[PGliteInternal][init][${stageName}] ${stamp()} COMPLETE (took ${elapsed}ms)`)
+        return result
+      } catch (error) {
+        const elapsed = (_now() - stageStart).toFixed(1)
+        console.error(`[PGliteInternal][init][${stageName}] ${stamp()} FAILED after ${elapsed}ms:`, error)
+        throw error
+      } finally {
+        clearInterval(heartbeatInterval)
+      }
+    }
+
     const dataDirInfo = options.dataDir ?? 'memory://'
     const backend = options.fs ? 'custom-fs' : (options.dataDir?.split('://')[0] ?? 'memory')
     console.info(`[PGliteInternal][init] ${stamp()} ========== PGlite #init START ==========`)
@@ -219,12 +281,12 @@ export class PGlite
       this.fs = options.fs
       console.debug(`[PGliteInternal][init] ${stamp()} using provided filesystem instance`)
     } else {
-      console.debug(`[PGliteInternal][init] ${stamp()} parsing dataDir and loading filesystem...`)
-      const fsLoadStart = _now()
+      // [NMT CUSTOMIZATION] Wrap filesystem loading with stage guard
       const { dataDir, fsType } = parseDataDir(options.dataDir)
       console.debug(`[PGliteInternal][init] ${stamp()} parseDataDir result: dataDir=${dataDir}, fsType=${fsType}`)
-      this.fs = await loadFs(dataDir, fsType)
-      console.debug(`[PGliteInternal][init] ${stamp()} loadFs completed (took ${(_now() - fsLoadStart).toFixed(1)}ms)`)
+      this.fs = await withInitStageGuard('loadFs', async () => {
+        return await loadFs(dataDir, fsType)
+      }, 30000) // 30s timeout for filesystem loading
     }
 
     const extensionBundlePromises: Record<string, Promise<Blob | null>> = {}
@@ -358,14 +420,15 @@ export class PGlite
       ],
     }
 
-    console.debug(`[PGliteInternal][init] ${stamp()} calling this.fs.init()...`)
-    const fsInitStart = _now()
-    const { emscriptenOpts: amendedEmscriptenOpts } = await this.fs!.init(
-      this,
-      emscriptenOpts,
+    // [NMT CUSTOMIZATION] Wrap fs.init() with stage guard
+    const { emscriptenOpts: amendedEmscriptenOpts } = await withInitStageGuard(
+      'fs.init',
+      async () => {
+        return await this.fs!.init(this, emscriptenOpts)
+      },
+      30000, // 30s timeout for filesystem initialization
     )
     emscriptenOpts = amendedEmscriptenOpts
-    console.debug(`[PGliteInternal][init] ${stamp()} this.fs.init() completed (took ${(_now() - fsInitStart).toFixed(1)}ms)`)
 
     // # Setup extensions
     // This is the first step of loading PGlite extensions
@@ -408,18 +471,25 @@ export class PGlite
     emscriptenOpts['pg_extensions'] = extensionBundlePromises
     console.debug(`[PGliteInternal][init] ${stamp()} extensions setup completed (took ${(_now() - extensionsSetupStart).toFixed(1)}ms)`)
 
-    // Await the fs bundle - we do this just before calling PostgresModFactory
-    // as it needs the fs bundle to be ready.
-    console.debug(`[PGliteInternal][init] ${stamp()} awaiting fsBundleBufferPromise...`)
-    const fsBundleAwaitStart = _now()
-    await fsBundleBufferPromise
-    console.info(`[PGliteInternal][init] ${stamp()} fsBundleBufferPromise resolved (waited ${(_now() - fsBundleAwaitStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Wrap fs bundle await with stage guard
+    await withInitStageGuard(
+      'fsBundleAwait',
+      async () => {
+        await fsBundleBufferPromise
+      },
+      30000, // 30s timeout for fs bundle loading
+    )
 
-    // Load the database engine
-    console.debug(`[PGliteInternal][init] ${stamp()} calling PostgresModFactory()...`)
-    const postgresModStart = _now()
-    this.mod = await PostgresModFactory(emscriptenOpts)
-    console.info(`[PGliteInternal][init] ${stamp()} PostgresModFactory() completed (took ${(_now() - postgresModStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Wrap PostgresModFactory with stage guard - this is the most critical
+    // stage where Chrome hangs have been observed. Use longer timeout (90s) as Emscripten
+    // module instantiation can be legitimately slow on first load.
+    this.mod = await withInitStageGuard(
+      'PostgresModFactory',
+      async () => {
+        return await PostgresModFactory(emscriptenOpts)
+      },
+      90000, // 90s timeout - Emscripten module factory can be slow
+    )
 
     // set the write callback
     this.#pglite_write = this.mod.addFunction((ptr: any, length: number) => {
@@ -484,11 +554,14 @@ export class PGlite
     this.mod._set_read_write_cbs(this.#pglite_read, this.#pglite_write)
     console.debug(`[PGliteInternal][init] ${stamp()} read/write callbacks registered`)
 
-    // Sync the filesystem from any previous store
-    console.debug(`[PGliteInternal][init] ${stamp()} calling initialSyncFs()...`)
-    const initialSyncStart = _now()
-    await this.fs!.initialSyncFs()
-    console.debug(`[PGliteInternal][init] ${stamp()} initialSyncFs() completed (took ${(_now() - initialSyncStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Wrap initialSyncFs with stage guard
+    await withInitStageGuard(
+      'initialSyncFs',
+      async () => {
+        await this.fs!.initialSyncFs()
+      },
+      60000, // 60s timeout for initial filesystem sync
+    )
 
     // If the user has provided a tarball to load the database from, do that now.
     // We do this after the initial sync so that we can throw if the database
@@ -515,11 +588,14 @@ export class PGlite
       console.debug(`[PGliteInternal][init] ${stamp()} no existing database found, will initialize new database`)
     }
 
-    // Start compiling dynamic extensions present in FS.
-    console.debug(`[PGliteInternal][init] ${stamp()} calling loadExtensions()...`)
-    const loadExtStart = _now()
-    await loadExtensions(this.mod, (...args) => this.#log(...args))
-    console.debug(`[PGliteInternal][init] ${stamp()} loadExtensions() completed (took ${(_now() - loadExtStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Wrap loadExtensions with stage guard
+    await withInitStageGuard(
+      'loadExtensions',
+      async () => {
+        await loadExtensions(this.mod!, (...args) => this.#log(...args))
+      },
+      30000, // 30s timeout for extension loading
+    )
 
     // Initialize the database
     console.debug(`[PGliteInternal][init] ${stamp()} calling _pgl_initdb()...`)
@@ -581,12 +657,14 @@ export class PGlite
     this.mod._pgl_backend()
     console.debug(`[PGliteInternal][init] ${stamp()} _pgl_backend() completed (took ${(_now() - backendStart).toFixed(1)}ms)`)
 
-    // Sync any changes back to the persisted store (if there is one)
-    // TODO: only sync here if initdb did init db.
-    console.debug(`[PGliteInternal][init] ${stamp()} calling syncToFs()...`)
-    const syncToFsStart = _now()
-    await this.syncToFs()
-    console.debug(`[PGliteInternal][init] ${stamp()} syncToFs() completed (took ${(_now() - syncToFsStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Wrap syncToFs with stage guard
+    await withInitStageGuard(
+      'syncToFs',
+      async () => {
+        await this.syncToFs()
+      },
+      60000, // 60s timeout for final filesystem sync
+    )
 
     this.#ready = true
     console.info(`[PGliteInternal][init] ${stamp()} database ready flag set`)
@@ -596,19 +674,27 @@ export class PGlite
     await this.exec('SET search_path TO public;')
     console.debug(`[PGliteInternal][init] ${stamp()} search_path set`)
 
-    // Init array types
-    console.debug(`[PGliteInternal][init] ${stamp()} initializing array types...`)
-    const arrayTypesStart = _now()
-    await this._initArrayTypes()
-    console.debug(`[PGliteInternal][init] ${stamp()} array types initialized (took ${(_now() - arrayTypesStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Wrap array type initialization with stage guard
+    await withInitStageGuard(
+      'initArrayTypes',
+      async () => {
+        await this._initArrayTypes()
+      },
+      30000, // 30s timeout for array type initialization
+    )
 
-    // Init extensions
-    console.debug(`[PGliteInternal][init] ${stamp()} running ${extensionInitFns.length} extension init function(s)...`)
-    const extInitStart = _now()
-    for (const initFn of extensionInitFns) {
-      await initFn()
+    // [NMT CUSTOMIZATION] Wrap extension init functions with stage guard
+    if (extensionInitFns.length > 0) {
+      await withInitStageGuard(
+        'extensionInitFns',
+        async () => {
+          for (const initFn of extensionInitFns) {
+            await initFn()
+          }
+        },
+        60000, // 60s timeout for all extension init functions
+      )
     }
-    console.debug(`[PGliteInternal][init] ${stamp()} extension init functions completed (took ${(_now() - extInitStart).toFixed(1)}ms)`)
 
     const totalElapsed = (_now() - t0).toFixed(1)
     console.info(`[PGliteInternal][init] ${stamp()} ========== PGlite #init COMPLETE (total ${totalElapsed}ms) ==========`)

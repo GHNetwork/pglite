@@ -97,8 +97,36 @@ export async function instantiateWasm(
       module: newModule,
     }
   } else {
-    // Browser path
-    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: browser path`)
+    // =============================================================================
+    // [NMT CUSTOMIZATION] Browser path - ArrayBuffer-based instantiation
+    // =============================================================================
+    // RATIONALE: WebAssembly.instantiateStreaming() is optimized for HTTP responses
+    // with strict Content-Type: application/wasm requirements. However, in our
+    // offline-first PWA context with OPFS storage and service workers:
+    //
+    // 1. MIME-type mismatches: Service workers may serve cached WASM without the
+    //    correct Content-Type header, causing instantiateStreaming to fail silently.
+    //
+    // 2. Stream handling: Response streams from service workers, OPFS, or blob URLs
+    //    may not behave identically to fresh HTTP streams, leading to hangs.
+    //
+    // 3. No performance benefit: For locally-served WASM (already in memory/cache),
+    //    streaming provides no advantage over ArrayBuffer-based instantiation.
+    //
+    // 4. Chrome-specific hangs: We observed 60s+ hangs in Chrome regular mode when
+    //    using instantiateStreaming with our asset pipeline.
+    //
+    // SOLUTION: Use WebAssembly.instantiate(buffer, imports) which:
+    //   - Works reliably regardless of Content-Type headers
+    //   - Handles any valid ArrayBuffer source (fetch, OPFS, cache, etc.)
+    //   - Provides consistent behavior across Chrome, Firefox, and Safari
+    //
+    // See: docs/pglite-custom/pglite-fork-decision-2025-12.md (Fix 6.1)
+    // See: docs/debugging/Current-focus-issues-and-theories.md
+    // =============================================================================
+    // [NMT CUSTOMIZATION] Use console.info so this log survives Terser pure_funcs
+    // stripping in production builds (Nuxt strips console.debug but preserves console.info)
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: browser path (NMT: using ArrayBuffer instantiation)`)
 
     if (!wasmDownloadPromise) {
       console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: no existing download promise, starting fetch`)
@@ -114,13 +142,20 @@ export async function instantiateWasm(
 
     if (!response.ok) {
       console.error(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WASM fetch failed with HTTP ${response.status}`)
+      throw new Error(`WASM fetch failed with HTTP ${response.status}`)
     }
 
-    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: calling WebAssembly.instantiateStreaming()...`)
-    const streamingStart = _now()
-    const { module: newModule, instance } =
-      await WebAssembly.instantiateStreaming(response, imports)
-    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WebAssembly.instantiateStreaming() completed (took ${(_now() - streamingStart).toFixed(1)}ms)`)
+    // [NMT CUSTOMIZATION] Convert response to ArrayBuffer instead of using streaming
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: converting response to ArrayBuffer...`)
+    const arrayBufferStart = _now()
+    const wasmBuffer = await response.arrayBuffer()
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: arrayBuffer() complete (${wasmBuffer.byteLength} bytes, took ${(_now() - arrayBufferStart).toFixed(1)}ms)`)
+
+    // [NMT CUSTOMIZATION] Use WebAssembly.instantiate(buffer, imports) instead of instantiateStreaming
+    console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: calling WebAssembly.instantiate(buffer)...`)
+    const instantiateStart = _now()
+    const { module: newModule, instance } = await WebAssembly.instantiate(wasmBuffer, imports)
+    console.info(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: WebAssembly.instantiate() completed (took ${(_now() - instantiateStart).toFixed(1)}ms)`)
 
     cachedWasmModule = newModule
     console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: cached module for future use`)
