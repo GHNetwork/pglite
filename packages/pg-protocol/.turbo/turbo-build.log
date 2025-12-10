@@ -1,30 +1,29 @@
 
-
 > @electric-sql/pg-protocol@0.0.4 build /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pg-protocol
 > tsup
 
-[34mCLI[39m Building entry: src/index.ts, src/messages.ts
-[34mCLI[39m Using tsconfig: tsconfig.json
-[34mCLI[39m tsup v8.5.1
-[34mCLI[39m Using tsup config: /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pg-protocol/tsup.config.ts
-[34mCLI[39m Target: es2020
-[34mCLI[39m Cleaning output folder
-[34mCJS[39m Build start
-[34mESM[39m Build start
-[32mCJS[39m [1mdist/messages.cjs     [22m[32m3.71 KB[39m
-[32mCJS[39m [1mdist/index.cjs        [22m[32m13.34 KB[39m
-[32mCJS[39m [1mdist/messages.cjs.map [22m[32m11.69 KB[39m
-[32mCJS[39m [1mdist/index.cjs.map    [22m[32m58.07 KB[39m
-[32mCJS[39m ⚡️ Build success in 73ms
-[32mESM[39m [1mdist/index.js              [22m[32m9.89 KB[39m
-[32mESM[39m [1mdist/messages.js           [22m[32m893.00 B[39m
-[32mESM[39m [1mdist/chunk-REUDAHVV.js     [22m[32m3.53 KB[39m
-[32mESM[39m [1mdist/index.js.map          [22m[32m46.18 KB[39m
-[32mESM[39m [1mdist/messages.js.map       [22m[32m71.00 B[39m
-[32mESM[39m [1mdist/chunk-REUDAHVV.js.map [22m[32m11.66 KB[39m
-[32mESM[39m ⚡️ Build success in 76ms
+CLI Building entry: src/index.ts, src/messages.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pg-protocol/tsup.config.ts
+CLI Target: es2020
+CLI Cleaning output folder
+CJS Build start
+ESM Build start
+CJS dist/index.cjs        13.34 KB
+CJS dist/messages.cjs     3.71 KB
+CJS dist/index.cjs.map    58.07 KB
+CJS dist/messages.cjs.map 11.69 KB
+CJS ⚡️ Build success in 70ms
+ESM dist/index.js              9.89 KB
+ESM dist/messages.js           893.00 B
+ESM dist/chunk-REUDAHVV.js     3.53 KB
+ESM dist/index.js.map          46.18 KB
+ESM dist/messages.js.map       71.00 B
+ESM dist/chunk-REUDAHVV.js.map 11.66 KB
+ESM ⚡️ Build success in 78ms
 DTS Build start
-DTS ⚡️ Build success in 3193ms
+DTS ⚡️ Build success in 2919ms
 DTS dist/index.d.cts             1.73 KB
 DTS dist/messages.d.cts          762.00 B
 DTS dist/messages-CaXcfh5Z.d.cts 12.65 KB

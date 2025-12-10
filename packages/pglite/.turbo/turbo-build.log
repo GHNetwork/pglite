@@ -1,5 +1,4 @@
 
-
 > @electric-sql/pglite@0.3.14 build /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite
 > pnpm build:js
 
@@ -7,22 +6,22 @@
 > @electric-sql/pglite@0.3.14 build:js /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite
 > tsup && tsx scripts/bundle-wasm.ts
 
-[34mCLI[39m Building entry: release/pglite.js
-[34mCLI[39m Using tsconfig: tsconfig.json
-[34mCLI[39m tsup v8.5.1
-[34mCLI[39m Using tsup config: /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite/tsup.config.ts
-[34mCLI[39m Building entry: src/index.ts, src/templating.ts, src/fs/base.ts, src/fs/nodefs.ts, src/fs/opfs-ahp.ts, src/live/index.ts, src/pg_ivm/index.ts, src/pg_uuidv7/index.ts, src/pgtap/index.ts, src/contrib/amcheck.ts, src/contrib/auto_explain.ts, src/contrib/bloom.ts, src/contrib/btree_gin.ts, src/contrib/btree_gist.ts, src/contrib/citext.ts, src/contrib/cube.ts, src/contrib/dict_int.ts, src/contrib/dict_xsyn.ts, src/contrib/earthdistance.ts, src/contrib/file_fdw.ts, src/contrib/fuzzystrmatch.ts, src/contrib/hstore.ts, src/contrib/intarray.ts, src/contrib/isn.ts, src/contrib/lo.ts, src/contrib/ltree.ts, src/contrib/pageinspect.ts, src/contrib/pg_buffercache.ts, src/contrib/pg_freespacemap.ts, src/contrib/pg_surgery.ts, src/contrib/pg_trgm.ts, src/contrib/pg_visibility.ts, src/contrib/pg_walinspect.ts, src/contrib/seg.ts, src/contrib/tablefunc.ts, src/contrib/tcn.ts, src/contrib/tsm_system_rows.ts, src/contrib/tsm_system_time.ts, src/contrib/unaccent.ts, src/contrib/uuid_ossp.ts, src/vector/index.ts, src/worker/index.ts
-[34mCLI[39m Using tsconfig: tsconfig.json
-[34mCLI[39m tsup v8.5.1
-[34mCLI[39m Using tsup config: /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite/tsup.config.ts
-[34mCLI[39m Target: es2020
-[34mCJS[39m Build start
-[34mCLI[39m Target: es2020
-[34mCLI[39m Cleaning output folder
-[34mESM[39m Build start
-[34mCJS[39m Build start
+CLI Building entry: release/pglite.js
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite/tsup.config.ts
+CLI Building entry: src/index.ts, src/templating.ts, src/contrib/amcheck.ts, src/contrib/auto_explain.ts, src/contrib/bloom.ts, src/contrib/btree_gin.ts, src/contrib/btree_gist.ts, src/contrib/citext.ts, src/contrib/cube.ts, src/contrib/dict_int.ts, src/contrib/dict_xsyn.ts, src/contrib/earthdistance.ts, src/contrib/file_fdw.ts, src/contrib/fuzzystrmatch.ts, src/contrib/hstore.ts, src/contrib/intarray.ts, src/contrib/isn.ts, src/contrib/lo.ts, src/contrib/ltree.ts, src/contrib/pageinspect.ts, src/contrib/pg_buffercache.ts, src/contrib/pg_freespacemap.ts, src/contrib/pg_surgery.ts, src/contrib/pg_trgm.ts, src/contrib/pg_visibility.ts, src/contrib/pg_walinspect.ts, src/contrib/seg.ts, src/contrib/tablefunc.ts, src/contrib/tcn.ts, src/contrib/tsm_system_rows.ts, src/contrib/tsm_system_time.ts, src/contrib/unaccent.ts, src/contrib/uuid_ossp.ts, src/fs/base.ts, src/fs/nodefs.ts, src/fs/opfs-ahp.ts, src/live/index.ts, src/pg_ivm/index.ts, src/pg_uuidv7/index.ts, src/pgtap/index.ts, src/vector/index.ts, src/worker/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /mnt/dev-data/app/nmtpathways-monorepo/packages/pglite/packages/pglite/tsup.config.ts
+CLI Target: es2020
+CJS Build start
+CLI Target: es2020
+CLI Cleaning output folder
+ESM Build start
+CJS Build start
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m12:28:20 AM[39m
+ WARN  [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]
 
     release/pglite.js:9:90760:
 [37m      9 │ ...${body} };`;ASM_CONSTS[start]=[32meval[37m(func)}if("__start_em_asm"in m...
@@ -33,7 +32,7 @@
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m12:28:20 AM[39m
+ WARN  [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]
 
     release/pglite.js:9:91251:
 [37m      9 │ ...${body};`;moduleExports[name]=[32meval[37m(func)}for(var name in moduleE...
@@ -43,11 +42,11 @@
 
 
 
-[32mCJS[39m [1mdist/pglite.cjs [22m[32m343.12 KB[39m
-[32mCJS[39m ⚡️ Build success in 439ms
+CJS dist/pglite.cjs 343.12 KB
+CJS ⚡️ Build success in 404ms
 DTS Build start
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m12:28:20 AM[39m
+ WARN  [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]
 
     release/pglite.js:9:90760:
 [37m      9 │ ...${body} };`;ASM_CONSTS[start]=[32meval[37m(func)}if("__start_em_asm"in m...
@@ -58,7 +57,7 @@ DTS Build start
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m12:28:20 AM[39m
+ WARN  [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]
 
     release/pglite.js:9:91251:
 [37m      9 │ ...${body};`;moduleExports[name]=[32meval[37m(func)}for(var name in moduleE...
@@ -68,93 +67,93 @@ DTS Build start
 
 
 
-[32mCJS[39m [1mdist/templating.cjs                  [22m[32m1.44 KB[39m
-[32mCJS[39m [1mdist/fs/base.cjs                     [22m[32m13.97 KB[39m
-[32mCJS[39m [1mdist/fs/nodefs.cjs                   [22m[32m10.66 KB[39m
-[32mCJS[39m [1mdist/fs/opfs-ahp.cjs                 [22m[32m23.84 KB[39m
-[32mCJS[39m [1mdist/live/index.cjs                  [22m[32m19.11 KB[39m
-[32mCJS[39m [1mdist/pg_ivm/index.cjs                [22m[32m874.00 B[39m
-[32mCJS[39m [1mdist/pg_uuidv7/index.cjs             [22m[32m886.00 B[39m
-[32mCJS[39m [1mdist/pgtap/index.cjs                 [22m[32m870.00 B[39m
-[32mCJS[39m [1mdist/contrib/amcheck.cjs             [22m[32m863.00 B[39m
-[32mCJS[39m [1mdist/contrib/auto_explain.cjs        [22m[32m888.00 B[39m
-[32mCJS[39m [1mdist/contrib/bloom.cjs               [22m[32m853.00 B[39m
-[32mCJS[39m [1mdist/contrib/btree_gin.cjs           [22m[32m873.00 B[39m
-[32mCJS[39m [1mdist/contrib/btree_gist.cjs          [22m[32m878.00 B[39m
-[32mCJS[39m [1mdist/contrib/citext.cjs              [22m[32m858.00 B[39m
-[32mCJS[39m [1mdist/index.cjs                       [22m[32m407.33 KB[39m
-[32mCJS[39m [1mdist/contrib/cube.cjs                [22m[32m848.00 B[39m
-[32mCJS[39m [1mdist/contrib/dict_int.cjs            [22m[32m868.00 B[39m
-[32mCJS[39m [1mdist/contrib/dict_xsyn.cjs           [22m[32m873.00 B[39m
-[32mCJS[39m [1mdist/contrib/file_fdw.cjs            [22m[32m868.00 B[39m
-[32mCJS[39m [1mdist/contrib/earthdistance.cjs       [22m[32m893.00 B[39m
-[32mCJS[39m [1mdist/contrib/fuzzystrmatch.cjs       [22m[32m893.00 B[39m
-[32mCJS[39m [1mdist/contrib/isn.cjs                 [22m[32m843.00 B[39m
-[32mCJS[39m [1mdist/contrib/intarray.cjs            [22m[32m868.00 B[39m
-[32mCJS[39m [1mdist/contrib/ltree.cjs               [22m[32m853.00 B[39m
-[32mCJS[39m [1mdist/contrib/lo.cjs                  [22m[32m838.00 B[39m
-[32mCJS[39m [1mdist/contrib/pageinspect.cjs         [22m[32m883.00 B[39m
-[32mCJS[39m [1mdist/contrib/pg_buffercache.cjs      [22m[32m898.00 B[39m
-[32mCJS[39m [1mdist/contrib/pg_freespacemap.cjs     [22m[32m903.00 B[39m
-[32mCJS[39m [1mdist/contrib/pg_surgery.cjs          [22m[32m878.00 B[39m
-[32mCJS[39m [1mdist/contrib/pg_trgm.cjs             [22m[32m863.00 B[39m
-[32mCJS[39m [1mdist/contrib/pg_visibility.cjs       [22m[32m893.00 B[39m
-[32mCJS[39m [1mdist/contrib/pg_walinspect.cjs       [22m[32m893.00 B[39m
-[32mCJS[39m [1mdist/contrib/seg.cjs                 [22m[32m843.00 B[39m
-[32mCJS[39m [1mdist/contrib/tablefunc.cjs           [22m[32m873.00 B[39m
-[32mCJS[39m [1mdist/contrib/tcn.cjs                 [22m[32m843.00 B[39m
-[32mCJS[39m [1mdist/contrib/tsm_system_rows.cjs     [22m[32m903.00 B[39m
-[32mCJS[39m [1mdist/contrib/tsm_system_time.cjs     [22m[32m903.00 B[39m
-[32mCJS[39m [1mdist/contrib/hstore.cjs              [22m[32m858.00 B[39m
-[32mCJS[39m [1mdist/contrib/unaccent.cjs            [22m[32m868.00 B[39m
-[32mCJS[39m [1mdist/contrib/uuid_ossp.cjs           [22m[32m873.00 B[39m
-[32mCJS[39m [1mdist/vector/index.cjs                [22m[32m876.00 B[39m
-[32mCJS[39m [1mdist/worker/index.cjs                [22m[32m27.36 KB[39m
-[32mCJS[39m [1mdist/templating.cjs.map              [22m[32m6.72 KB[39m
-[32mCJS[39m [1mdist/fs/base.cjs.map                 [22m[32m65.53 KB[39m
-[32mCJS[39m [1mdist/fs/nodefs.cjs.map               [22m[32m61.12 KB[39m
-[32mCJS[39m [1mdist/fs/opfs-ahp.cjs.map             [22m[32m100.80 KB[39m
-[32mCJS[39m [1mdist/live/index.cjs.map              [22m[32m103.75 KB[39m
-[32mCJS[39m [1mdist/pg_ivm/index.cjs.map            [22m[32m1.74 KB[39m
-[32mCJS[39m [1mdist/pg_uuidv7/index.cjs.map         [22m[32m1.76 KB[39m
-[32mCJS[39m [1mdist/pgtap/index.cjs.map             [22m[32m1.74 KB[39m
-[32mCJS[39m [1mdist/contrib/amcheck.cjs.map         [22m[32m1.72 KB[39m
-[32mCJS[39m [1mdist/contrib/auto_explain.cjs.map    [22m[32m1.76 KB[39m
-[32mCJS[39m [1mdist/contrib/bloom.cjs.map           [22m[32m1.71 KB[39m
-[32mCJS[39m [1mdist/contrib/btree_gin.cjs.map       [22m[32m1.74 KB[39m
-[32mCJS[39m [1mdist/contrib/btree_gist.cjs.map      [22m[32m1.75 KB[39m
-[32mCJS[39m [1mdist/contrib/citext.cjs.map          [22m[32m1.72 KB[39m
-[32mCJS[39m [1mdist/contrib/cube.cjs.map            [22m[32m1.70 KB[39m
-[32mCJS[39m [1mdist/contrib/dict_int.cjs.map        [22m[32m1.73 KB[39m
-[32mCJS[39m [1mdist/contrib/dict_xsyn.cjs.map       [22m[32m1.74 KB[39m
-[32mCJS[39m [1mdist/contrib/file_fdw.cjs.map        [22m[32m1.73 KB[39m
-[32mCJS[39m [1mdist/contrib/earthdistance.cjs.map   [22m[32m1.77 KB[39m
-[32mCJS[39m [1mdist/contrib/isn.cjs.map             [22m[32m1.70 KB[39m
-[32mCJS[39m [1mdist/contrib/intarray.cjs.map        [22m[32m1.73 KB[39m
-[32mCJS[39m [1mdist/contrib/ltree.cjs.map           [22m[32m1.71 KB[39m
-[32mCJS[39m [1mdist/contrib/lo.cjs.map              [22m[32m1.69 KB[39m
-[32mCJS[39m [1mdist/contrib/pageinspect.cjs.map     [22m[32m1.75 KB[39m
-[32mCJS[39m [1mdist/contrib/pg_buffercache.cjs.map  [22m[32m1.77 KB[39m
-[32mCJS[39m [1mdist/contrib/pg_freespacemap.cjs.map [22m[32m1.80 KB[39m
-[32mCJS[39m [1mdist/contrib/pg_surgery.cjs.map      [22m[32m1.75 KB[39m
-[32mCJS[39m [1mdist/contrib/pg_trgm.cjs.map         [22m[32m1.72 KB[39m
-[32mCJS[39m [1mdist/contrib/pg_visibility.cjs.map   [22m[32m1.77 KB[39m
-[32mCJS[39m [1mdist/contrib/pg_walinspect.cjs.map   [22m[32m1.77 KB[39m
-[32mCJS[39m [1mdist/contrib/seg.cjs.map             [22m[32m1.70 KB[39m
-[32mCJS[39m [1mdist/contrib/tablefunc.cjs.map       [22m[32m1.74 KB[39m
-[32mCJS[39m [1mdist/contrib/tcn.cjs.map             [22m[32m1.70 KB[39m
-[32mCJS[39m [1mdist/contrib/tsm_system_rows.cjs.map [22m[32m1.80 KB[39m
-[32mCJS[39m [1mdist/contrib/tsm_system_time.cjs.map [22m[32m1.80 KB[39m
-[32mCJS[39m [1mdist/contrib/hstore.cjs.map          [22m[32m1.72 KB[39m
-[32mCJS[39m [1mdist/contrib/unaccent.cjs.map        [22m[32m1.73 KB[39m
-[32mCJS[39m [1mdist/contrib/uuid_ossp.cjs.map       [22m[32m1.74 KB[39m
-[32mCJS[39m [1mdist/vector/index.cjs.map            [22m[32m1.75 KB[39m
-[32mCJS[39m [1mdist/worker/index.cjs.map            [22m[32m150.19 KB[39m
-[32mCJS[39m [1mdist/index.cjs.map                   [22m[32m994.93 KB[39m
-[32mCJS[39m [1mdist/contrib/fuzzystrmatch.cjs.map   [22m[32m1.77 KB[39m
-[32mCJS[39m ⚡️ Build success in 899ms
+CJS dist/index.cjs                       407.33 KB
+CJS dist/templating.cjs                  1.44 KB
+CJS dist/contrib/amcheck.cjs             863.00 B
+CJS dist/contrib/auto_explain.cjs        888.00 B
+CJS dist/contrib/bloom.cjs               853.00 B
+CJS dist/contrib/btree_gin.cjs           873.00 B
+CJS dist/contrib/btree_gist.cjs          878.00 B
+CJS dist/contrib/citext.cjs              858.00 B
+CJS dist/contrib/cube.cjs                848.00 B
+CJS dist/contrib/dict_int.cjs            868.00 B
+CJS dist/contrib/dict_xsyn.cjs           873.00 B
+CJS dist/contrib/earthdistance.cjs       893.00 B
+CJS dist/contrib/file_fdw.cjs            868.00 B
+CJS dist/contrib/fuzzystrmatch.cjs       893.00 B
+CJS dist/contrib/hstore.cjs              858.00 B
+CJS dist/contrib/intarray.cjs            868.00 B
+CJS dist/contrib/isn.cjs                 843.00 B
+CJS dist/contrib/lo.cjs                  838.00 B
+CJS dist/contrib/ltree.cjs               853.00 B
+CJS dist/contrib/pageinspect.cjs         883.00 B
+CJS dist/contrib/pg_buffercache.cjs      898.00 B
+CJS dist/contrib/pg_freespacemap.cjs     903.00 B
+CJS dist/contrib/pg_surgery.cjs          878.00 B
+CJS dist/contrib/pg_trgm.cjs             863.00 B
+CJS dist/contrib/seg.cjs                 843.00 B
+CJS dist/contrib/pg_walinspect.cjs       893.00 B
+CJS dist/contrib/pg_visibility.cjs       893.00 B
+CJS dist/contrib/tcn.cjs                 843.00 B
+CJS dist/contrib/tsm_system_time.cjs     903.00 B
+CJS dist/contrib/unaccent.cjs            868.00 B
+CJS dist/contrib/uuid_ossp.cjs           873.00 B
+CJS dist/fs/base.cjs                     13.97 KB
+CJS dist/fs/nodefs.cjs                   10.66 KB
+CJS dist/fs/opfs-ahp.cjs                 23.84 KB
+CJS dist/contrib/tsm_system_rows.cjs     903.00 B
+CJS dist/contrib/tablefunc.cjs           873.00 B
+CJS dist/live/index.cjs                  19.11 KB
+CJS dist/pg_ivm/index.cjs                874.00 B
+CJS dist/pg_uuidv7/index.cjs             886.00 B
+CJS dist/pgtap/index.cjs                 870.00 B
+CJS dist/vector/index.cjs                876.00 B
+CJS dist/worker/index.cjs                27.36 KB
+CJS dist/contrib/amcheck.cjs.map         1.72 KB
+CJS dist/templating.cjs.map              6.72 KB
+CJS dist/contrib/auto_explain.cjs.map    1.76 KB
+CJS dist/contrib/bloom.cjs.map           1.71 KB
+CJS dist/contrib/btree_gin.cjs.map       1.74 KB
+CJS dist/contrib/btree_gist.cjs.map      1.75 KB
+CJS dist/contrib/citext.cjs.map          1.72 KB
+CJS dist/contrib/cube.cjs.map            1.70 KB
+CJS dist/contrib/dict_int.cjs.map        1.73 KB
+CJS dist/contrib/dict_xsyn.cjs.map       1.74 KB
+CJS dist/contrib/earthdistance.cjs.map   1.77 KB
+CJS dist/contrib/file_fdw.cjs.map        1.73 KB
+CJS dist/contrib/fuzzystrmatch.cjs.map   1.77 KB
+CJS dist/contrib/hstore.cjs.map          1.72 KB
+CJS dist/contrib/intarray.cjs.map        1.73 KB
+CJS dist/contrib/isn.cjs.map             1.70 KB
+CJS dist/contrib/ltree.cjs.map           1.71 KB
+CJS dist/contrib/lo.cjs.map              1.69 KB
+CJS dist/contrib/pageinspect.cjs.map     1.75 KB
+CJS dist/contrib/pg_buffercache.cjs.map  1.77 KB
+CJS dist/contrib/pg_freespacemap.cjs.map 1.80 KB
+CJS dist/contrib/pg_trgm.cjs.map         1.72 KB
+CJS dist/contrib/seg.cjs.map             1.70 KB
+CJS dist/contrib/pg_surgery.cjs.map      1.75 KB
+CJS dist/contrib/pg_walinspect.cjs.map   1.77 KB
+CJS dist/contrib/pg_visibility.cjs.map   1.77 KB
+CJS dist/contrib/tcn.cjs.map             1.70 KB
+CJS dist/contrib/tsm_system_time.cjs.map 1.80 KB
+CJS dist/contrib/unaccent.cjs.map        1.73 KB
+CJS dist/contrib/uuid_ossp.cjs.map       1.74 KB
+CJS dist/fs/base.cjs.map                 65.53 KB
+CJS dist/contrib/tsm_system_rows.cjs.map 1.80 KB
+CJS dist/contrib/tablefunc.cjs.map       1.74 KB
+CJS dist/live/index.cjs.map              103.75 KB
+CJS dist/pg_ivm/index.cjs.map            1.74 KB
+CJS dist/pg_uuidv7/index.cjs.map         1.76 KB
+CJS dist/pgtap/index.cjs.map             1.74 KB
+CJS dist/vector/index.cjs.map            1.75 KB
+CJS dist/worker/index.cjs.map            150.19 KB
+CJS dist/index.cjs.map                   994.93 KB
+CJS dist/fs/opfs-ahp.cjs.map             100.80 KB
+CJS dist/fs/nodefs.cjs.map               61.12 KB
+CJS ⚡️ Build success in 836ms
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m12:28:20 AM[39m
+ WARN  [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]
 
     release/pglite.js:9:90760:
 [37m      9 │ ...${body} };`;ASM_CONSTS[start]=[32meval[37m(func)}if("__start_em_asm"in m...
@@ -165,7 +164,7 @@ DTS Build start
 
 
 
-[43m[30m WARN [39m[49m [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]                                                                                                           [90m12:28:20 AM[39m
+ WARN  [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mUsing direct eval with a bundler is not recommended and may cause problems[0m [direct-eval]
 
     release/pglite.js:9:91251:
 [37m      9 │ ...${body};`;moduleExports[name]=[32meval[37m(func)}for(var name in moduleE...
@@ -175,102 +174,102 @@ DTS Build start
 
 
 
-[32mESM[39m [1mdist/vector/index.js                [22m[32m232.00 B[39m
-[32mESM[39m [1mdist/worker/index.js                [22m[32m12.95 KB[39m
-[32mESM[39m [1mdist/contrib/pg_walinspect.js       [22m[32m242.00 B[39m
-[32mESM[39m [1mdist/contrib/seg.js                 [22m[32m202.00 B[39m
-[32mESM[39m [1mdist/contrib/tablefunc.js           [22m[32m226.00 B[39m
-[32mESM[39m [1mdist/contrib/tcn.js                 [22m[32m202.00 B[39m
-[32mESM[39m [1mdist/contrib/tsm_system_rows.js     [22m[32m250.00 B[39m
-[32mESM[39m [1mdist/contrib/tsm_system_time.js     [22m[32m250.00 B[39m
-[32mESM[39m [1mdist/contrib/unaccent.js            [22m[32m222.00 B[39m
-[32mESM[39m [1mdist/contrib/uuid_ossp.js           [22m[32m226.00 B[39m
-[32mESM[39m [1mdist/contrib/lo.js                  [22m[32m198.00 B[39m
-[32mESM[39m [1mdist/contrib/ltree.js               [22m[32m210.00 B[39m
-[32mESM[39m [1mdist/contrib/pageinspect.js         [22m[32m234.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_buffercache.js      [22m[32m246.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_freespacemap.js     [22m[32m250.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_surgery.js          [22m[32m230.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_trgm.js             [22m[32m218.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_visibility.js       [22m[32m242.00 B[39m
-[32mESM[39m [1mdist/contrib/dict_int.js            [22m[32m222.00 B[39m
-[32mESM[39m [1mdist/contrib/earthdistance.js       [22m[32m242.00 B[39m
-[32mESM[39m [1mdist/contrib/file_fdw.js            [22m[32m222.00 B[39m
-[32mESM[39m [1mdist/contrib/fuzzystrmatch.js       [22m[32m242.00 B[39m
-[32mESM[39m [1mdist/contrib/dict_xsyn.js           [22m[32m226.00 B[39m
-[32mESM[39m [1mdist/contrib/hstore.js              [22m[32m214.00 B[39m
-[32mESM[39m [1mdist/contrib/intarray.js            [22m[32m222.00 B[39m
-[32mESM[39m [1mdist/pgtap/index.js                 [22m[32m227.00 B[39m
-[32mESM[39m [1mdist/contrib/amcheck.js             [22m[32m218.00 B[39m
-[32mESM[39m [1mdist/contrib/auto_explain.js        [22m[32m238.00 B[39m
-[32mESM[39m [1mdist/contrib/bloom.js               [22m[32m210.00 B[39m
-[32mESM[39m [1mdist/contrib/btree_gin.js           [22m[32m226.00 B[39m
-[32mESM[39m [1mdist/contrib/btree_gist.js          [22m[32m230.00 B[39m
-[32mESM[39m [1mdist/contrib/citext.js              [22m[32m214.00 B[39m
-[32mESM[39m [1mdist/contrib/cube.js                [22m[32m206.00 B[39m
-[32mESM[39m [1mdist/index.js                       [22m[32m352.78 KB[39m
-[32mESM[39m [1mdist/chunk-QIQ6ZHLC.js              [22m[32m4.11 KB[39m
-[32mESM[39m [1mdist/templating.js                  [22m[32m161.00 B[39m
-[32mESM[39m [1mdist/chunk-MFIGESQR.js              [22m[32m998.00 B[39m
-[32mESM[39m [1mdist/fs/base.js                     [22m[32m238.00 B[39m
-[32mESM[39m [1mdist/fs/nodefs.js                   [22m[32m536.00 B[39m
-[32mESM[39m [1mdist/fs/opfs-ahp.js                 [22m[32m9.85 KB[39m
-[32mESM[39m [1mdist/chunk-5L2AN65G.js              [22m[32m14.58 KB[39m
-[32mESM[39m [1mdist/live/index.js                  [22m[32m10.90 KB[39m
-[32mESM[39m [1mdist/chunk-YMWB5NPP.js              [22m[32m24.00 KB[39m
-[32mESM[39m [1mdist/pg_ivm/index.js                [22m[32m230.00 B[39m
-[32mESM[39m [1mdist/pg_uuidv7/index.js             [22m[32m239.00 B[39m
-[32mESM[39m [1mdist/contrib/isn.js                 [22m[32m202.00 B[39m
-[32mESM[39m [1mdist/chunk-LXLR7NCL.js              [22m[32m1.36 KB[39m
-[32mESM[39m [1mdist/vector/index.js.map            [22m[32m685.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_walinspect.js.map   [22m[32m692.00 B[39m
-[32mESM[39m [1mdist/worker/index.js.map            [22m[32m43.60 KB[39m
-[32mESM[39m [1mdist/contrib/seg.js.map             [22m[32m640.00 B[39m
-[32mESM[39m [1mdist/contrib/tablefunc.js.map       [22m[32m670.00 B[39m
-[32mESM[39m [1mdist/contrib/unaccent.js.map        [22m[32m665.00 B[39m
-[32mESM[39m [1mdist/contrib/tsm_system_time.js.map [22m[32m722.00 B[39m
-[32mESM[39m [1mdist/contrib/tcn.js.map             [22m[32m640.00 B[39m
-[32mESM[39m [1mdist/contrib/uuid_ossp.js.map       [22m[32m670.00 B[39m
-[32mESM[39m [1mdist/contrib/lo.js.map              [22m[32m635.00 B[39m
-[32mESM[39m [1mdist/contrib/tsm_system_rows.js.map [22m[32m722.00 B[39m
-[32mESM[39m [1mdist/contrib/pageinspect.js.map     [22m[32m680.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_buffercache.js.map  [22m[32m697.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_freespacemap.js.map [22m[32m722.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_surgery.js.map      [22m[32m675.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_trgm.js.map         [22m[32m660.00 B[39m
-[32mESM[39m [1mdist/contrib/pg_visibility.js.map   [22m[32m692.00 B[39m
-[32mESM[39m [1mdist/contrib/dict_int.js.map        [22m[32m665.00 B[39m
-[32mESM[39m [1mdist/contrib/earthdistance.js.map   [22m[32m692.00 B[39m
-[32mESM[39m [1mdist/contrib/file_fdw.js.map        [22m[32m665.00 B[39m
-[32mESM[39m [1mdist/contrib/fuzzystrmatch.js.map   [22m[32m692.00 B[39m
-[32mESM[39m [1mdist/contrib/dict_xsyn.js.map       [22m[32m670.00 B[39m
-[32mESM[39m [1mdist/contrib/hstore.js.map          [22m[32m655.00 B[39m
-[32mESM[39m [1mdist/contrib/intarray.js.map        [22m[32m665.00 B[39m
-[32mESM[39m [1mdist/pgtap/index.js.map             [22m[32m678.00 B[39m
-[32mESM[39m [1mdist/contrib/amcheck.js.map         [22m[32m660.00 B[39m
-[32mESM[39m [1mdist/contrib/auto_explain.js.map    [22m[32m685.00 B[39m
-[32mESM[39m [1mdist/contrib/bloom.js.map           [22m[32m650.00 B[39m
-[32mESM[39m [1mdist/contrib/btree_gin.js.map       [22m[32m670.00 B[39m
-[32mESM[39m [1mdist/contrib/btree_gist.js.map      [22m[32m675.00 B[39m
-[32mESM[39m [1mdist/contrib/citext.js.map          [22m[32m655.00 B[39m
-[32mESM[39m [1mdist/contrib/cube.js.map            [22m[32m645.00 B[39m
-[32mESM[39m [1mdist/chunk-QIQ6ZHLC.js.map          [22m[32m22.05 KB[39m
-[32mESM[39m [1mdist/templating.js.map              [22m[32m71.00 B[39m
-[32mESM[39m [1mdist/chunk-MFIGESQR.js.map          [22m[32m6.57 KB[39m
-[32mESM[39m [1mdist/fs/base.js.map                 [22m[32m71.00 B[39m
-[32mESM[39m [1mdist/fs/nodefs.js.map               [22m[32m1.69 KB[39m
-[32mESM[39m [1mdist/fs/opfs-ahp.js.map             [22m[32m35.74 KB[39m
-[32mESM[39m [1mdist/chunk-5L2AN65G.js.map          [22m[32m66.43 KB[39m
-[32mESM[39m [1mdist/live/index.js.map              [22m[32m36.97 KB[39m
-[32mESM[39m [1mdist/chunk-YMWB5NPP.js.map          [22m[32m98.99 KB[39m
-[32mESM[39m [1mdist/pg_ivm/index.js.map            [22m[32m683.00 B[39m
-[32mESM[39m [1mdist/pg_uuidv7/index.js.map         [22m[32m698.00 B[39m
-[32mESM[39m [1mdist/contrib/isn.js.map             [22m[32m640.00 B[39m
-[32mESM[39m [1mdist/chunk-LXLR7NCL.js.map          [22m[32m712.00 B[39m
-[32mESM[39m [1mdist/contrib/ltree.js.map           [22m[32m650.00 B[39m
-[32mESM[39m [1mdist/index.js.map                   [22m[32m762.73 KB[39m
-[32mESM[39m ⚡️ Build success in 960ms
-DTS ⚡️ Build success in 22540ms
+ESM dist/vector/index.js                232.00 B
+ESM dist/worker/index.js                12.95 KB
+ESM dist/contrib/uuid_ossp.js           226.00 B
+ESM dist/fs/base.js                     238.00 B
+ESM dist/fs/nodefs.js                   536.00 B
+ESM dist/fs/opfs-ahp.js                 9.85 KB
+ESM dist/live/index.js                  10.90 KB
+ESM dist/pg_ivm/index.js                230.00 B
+ESM dist/pg_uuidv7/index.js             239.00 B
+ESM dist/pgtap/index.js                 227.00 B
+ESM dist/contrib/pg_visibility.js       242.00 B
+ESM dist/contrib/pg_walinspect.js       242.00 B
+ESM dist/contrib/seg.js                 202.00 B
+ESM dist/contrib/tablefunc.js           226.00 B
+ESM dist/contrib/tcn.js                 202.00 B
+ESM dist/contrib/tsm_system_rows.js     250.00 B
+ESM dist/contrib/tsm_system_time.js     250.00 B
+ESM dist/contrib/unaccent.js            222.00 B
+ESM dist/contrib/isn.js                 202.00 B
+ESM dist/contrib/lo.js                  198.00 B
+ESM dist/contrib/ltree.js               210.00 B
+ESM dist/contrib/pageinspect.js         234.00 B
+ESM dist/contrib/pg_buffercache.js      246.00 B
+ESM dist/contrib/pg_freespacemap.js     250.00 B
+ESM dist/contrib/pg_surgery.js          230.00 B
+ESM dist/contrib/pg_trgm.js             218.00 B
+ESM dist/contrib/cube.js                206.00 B
+ESM dist/contrib/dict_int.js            222.00 B
+ESM dist/contrib/dict_xsyn.js           226.00 B
+ESM dist/contrib/earthdistance.js       242.00 B
+ESM dist/contrib/file_fdw.js            222.00 B
+ESM dist/contrib/fuzzystrmatch.js       242.00 B
+ESM dist/contrib/hstore.js              214.00 B
+ESM dist/contrib/intarray.js            222.00 B
+ESM dist/chunk-AX2J2225.js              4.11 KB
+ESM dist/chunk-5L2AN65G.js              14.58 KB
+ESM dist/chunk-YMWB5NPP.js              24.00 KB
+ESM dist/templating.js                  161.00 B
+ESM dist/chunk-MFIGESQR.js              998.00 B
+ESM dist/contrib/amcheck.js             218.00 B
+ESM dist/contrib/auto_explain.js        238.00 B
+ESM dist/contrib/bloom.js               210.00 B
+ESM dist/contrib/btree_gin.js           226.00 B
+ESM dist/contrib/btree_gist.js          230.00 B
+ESM dist/contrib/citext.js              214.00 B
+ESM dist/chunk-LXLR7NCL.js              1.36 KB
+ESM dist/index.js                       352.78 KB
+ESM dist/vector/index.js.map            685.00 B
+ESM dist/worker/index.js.map            43.60 KB
+ESM dist/contrib/uuid_ossp.js.map       670.00 B
+ESM dist/fs/base.js.map                 71.00 B
+ESM dist/fs/nodefs.js.map               1.69 KB
+ESM dist/fs/opfs-ahp.js.map             35.74 KB
+ESM dist/live/index.js.map              36.97 KB
+ESM dist/pg_ivm/index.js.map            683.00 B
+ESM dist/pg_uuidv7/index.js.map         698.00 B
+ESM dist/pgtap/index.js.map             678.00 B
+ESM dist/contrib/pg_visibility.js.map   692.00 B
+ESM dist/contrib/pg_walinspect.js.map   692.00 B
+ESM dist/contrib/seg.js.map             640.00 B
+ESM dist/contrib/tablefunc.js.map       670.00 B
+ESM dist/contrib/tcn.js.map             640.00 B
+ESM dist/contrib/tsm_system_rows.js.map 722.00 B
+ESM dist/contrib/tsm_system_time.js.map 722.00 B
+ESM dist/contrib/unaccent.js.map        665.00 B
+ESM dist/contrib/isn.js.map             640.00 B
+ESM dist/contrib/lo.js.map              635.00 B
+ESM dist/contrib/ltree.js.map           650.00 B
+ESM dist/contrib/pageinspect.js.map     680.00 B
+ESM dist/contrib/pg_buffercache.js.map  697.00 B
+ESM dist/contrib/pg_freespacemap.js.map 722.00 B
+ESM dist/contrib/pg_surgery.js.map      675.00 B
+ESM dist/contrib/pg_trgm.js.map         660.00 B
+ESM dist/contrib/cube.js.map            645.00 B
+ESM dist/contrib/dict_int.js.map        665.00 B
+ESM dist/contrib/dict_xsyn.js.map       670.00 B
+ESM dist/contrib/earthdistance.js.map   692.00 B
+ESM dist/contrib/file_fdw.js.map        665.00 B
+ESM dist/contrib/fuzzystrmatch.js.map   692.00 B
+ESM dist/contrib/hstore.js.map          655.00 B
+ESM dist/contrib/intarray.js.map        665.00 B
+ESM dist/chunk-AX2J2225.js.map          22.05 KB
+ESM dist/chunk-5L2AN65G.js.map          66.43 KB
+ESM dist/chunk-YMWB5NPP.js.map          98.99 KB
+ESM dist/templating.js.map              71.00 B
+ESM dist/chunk-MFIGESQR.js.map          6.57 KB
+ESM dist/contrib/amcheck.js.map         660.00 B
+ESM dist/contrib/auto_explain.js.map    685.00 B
+ESM dist/contrib/bloom.js.map           650.00 B
+ESM dist/contrib/btree_gin.js.map       670.00 B
+ESM dist/contrib/btree_gist.js.map      675.00 B
+ESM dist/contrib/citext.js.map          655.00 B
+ESM dist/chunk-LXLR7NCL.js.map          712.00 B
+ESM dist/index.js.map                   762.73 KB
+ESM ⚡️ Build success in 911ms
+DTS ⚡️ Build success in 23714ms
 DTS dist/index.d.ts                    16.97 KB
 DTS dist/fs/nodefs.d.ts                396.00 B
 DTS dist/fs/opfs-ahp.d.ts              3.77 KB
