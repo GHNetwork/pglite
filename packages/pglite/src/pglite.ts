@@ -598,10 +598,11 @@ export class PGlite
     )
 
     // Initialize the database
-    console.debug(`[PGliteInternal][init] ${stamp()} calling _pgl_initdb()...`)
+    // [NMT CUSTOMIZATION] Promote START log to console.info for production visibility
+    console.info(`[PGliteInternal][init][wasm.initdb] ${stamp()} START`)
     const initdbStart = _now()
     const idb = this.mod._pgl_initdb()
-    console.info(`[PGliteInternal][init] ${stamp()} _pgl_initdb() completed (took ${(_now() - initdbStart).toFixed(1)}ms, result=0b${idb.toString(2).padStart(4, '0')})`)
+    console.info(`[PGliteInternal][init][wasm.initdb] ${stamp()} COMPLETE (took ${(_now() - initdbStart).toFixed(1)}ms, result=0b${idb.toString(2).padStart(4, '0')})`)
 
     if (!idb) {
       // This would be a sab worker crash before pg_initdb can be called
@@ -652,10 +653,11 @@ export class PGlite
     }
 
     // (re)start backed after possible initdb boot/single.
-    console.debug(`[PGliteInternal][init] ${stamp()} calling _pgl_backend()...`)
+    // [NMT CUSTOMIZATION] Promote START and COMPLETE logs to console.info for production visibility
+    console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} START`)
     const backendStart = _now()
     this.mod._pgl_backend()
-    console.debug(`[PGliteInternal][init] ${stamp()} _pgl_backend() completed (took ${(_now() - backendStart).toFixed(1)}ms)`)
+    console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} COMPLETE (took ${(_now() - backendStart).toFixed(1)}ms)`)
 
     // [NMT CUSTOMIZATION] Wrap syncToFs with stage guard
     await withInitStageGuard(
