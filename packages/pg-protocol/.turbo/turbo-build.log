@@ -10,20 +10,20 @@ CLI Target: es2020
 CLI Cleaning output folder
 CJS Build start
 ESM Build start
-CJS dist/index.cjs        13.34 KB
 CJS dist/messages.cjs     3.71 KB
-CJS dist/index.cjs.map    58.07 KB
+CJS dist/index.cjs        13.34 KB
 CJS dist/messages.cjs.map 11.69 KB
-CJS ⚡️ Build success in 70ms
+CJS dist/index.cjs.map    58.07 KB
+CJS ⚡️ Build success in 55ms
 ESM dist/index.js              9.89 KB
-ESM dist/messages.js           893.00 B
 ESM dist/chunk-REUDAHVV.js     3.53 KB
-ESM dist/index.js.map          46.18 KB
+ESM dist/messages.js           893.00 B
 ESM dist/messages.js.map       71.00 B
+ESM dist/index.js.map          46.18 KB
 ESM dist/chunk-REUDAHVV.js.map 11.66 KB
-ESM ⚡️ Build success in 78ms
+ESM ⚡️ Build success in 60ms
 DTS Build start
-DTS ⚡️ Build success in 2919ms
+DTS ⚡️ Build success in 3215ms
 DTS dist/index.d.cts             1.73 KB
 DTS dist/messages.d.cts          762.00 B
 DTS dist/messages-CaXcfh5Z.d.cts 12.65 KB

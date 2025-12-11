@@ -19,9 +19,58 @@ This fork exists to:
 
 ## Custom Modifications
 
-### None Yet
+All NMT customizations are marked with `[NMT CUSTOMIZATION]` comments in the code.
 
-This fork was just created. Document all changes below as they are made.
+---
+
+### 2025-12-10 - Diagnostic Instrumentation and Crash Recovery (Updated)
+
+**Files Changed:**
+
+1. **`packages/pglite/src/pglite.ts`**
+   - Added pre-backend datadir validation and pg_control state logging (before `_pgl_backend()` call)
+   - Added try/catch wrapper around `_pgl_backend()` with emergency handle cleanup on crash
+   - **Fixed**: pg_control state is read at offset 16 (not offset 0) per PostgreSQL's `ControlFileData` struct
+   - **Added**: File size check before reading pg_control (must be at least 20 bytes, should be 8192)
+   - Purpose: Diagnose `RuntimeError: unreachable` crashes when using `loadDataDir` with prebuilt tarballs
+
+2. **`packages/pglite/src/fs/opfs-ahp.ts`**
+   - Added `emergencyCloseAllHandles()` method for crash recovery
+   - Added handle creation logging in `#init()` method
+   - Purpose: Prevent Access Handle leaks when `_pgl_backend()` crashes, which would cause `NoModificationAllowedError` on subsequent connection attempts
+
+3. **`packages/pglite/src/fs/tarUtils.ts`**
+   - Added post-load validation of required datadir paths (PG_VERSION, postgresql.conf, etc.)
+   - Added pg_control state logging after tarball extraction
+   - **Added**: Detailed extraction logging for pg_control file (tracks `file.data.length` from tinytar)
+   - **Fixed**: pg_control state is read at offset 16 (not offset 0) per PostgreSQL's `ControlFileData` struct
+   - **Added**: File size check before reading pg_control (detects empty files from tinytar extraction)
+   - Purpose: Diagnose why pg_control ends up empty after extraction, fail fast on invalid/corrupt tarballs
+
+**Reason:**
+When using `loadDataDir` to load a prebuilt database tarball, `_pgl_backend()` was crashing with `RuntimeError: unreachable` after `wasm.initdb` returned success (0b1110). This provided no context about what went wrong. These changes:
+1. Log the pg_control state to identify state mismatches (DB_SHUTDOWNED vs DB_IN_PRODUCTION)
+2. Validate critical files exist before backend startup
+3. Clean up leaked Access Handles on crash to enable retry logic
+4. Provide detailed diagnostic logs for debugging
+
+**Related Documentation:**
+- `docs/debugging/pglite-opfs-root-cause-analysis.md` - Comprehensive root cause analysis
+- `docs/debugging/chromium-i.md` - Chrome browser console logs
+- `docs/debugging/firefox.md` - Firefox browser console logs
+
+**Upstream Status:**
+- [ ] Not submitted (changes designed to be upstreamable)
+- [ ] PR submitted: #XXX
+- [ ] Merged upstream
+
+**Upstreamability Assessment:**
+All changes are designed to be upstreamable:
+- Pre-backend validation: Pure diagnostics, improves debugging for all `loadDataDir` users
+- pg_control logging: Documents internal Postgres state, very useful for debugging
+- try/catch around `_pgl_backend()`: Defensive programming, enables cleanup on crash
+- `emergencyCloseAllHandles()`: Fixes real bug where handles leak on crash
+- Post-load validation: Fail-fast on invalid datadirs, improves error messages
 
 ---
 

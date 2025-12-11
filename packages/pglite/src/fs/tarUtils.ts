@@ -60,6 +60,10 @@ export async function loadTar(
     }
   }
 
+  // [NMT CUSTOMIZATION] Track pg_control extraction for debugging
+  let pgControlExtracted = false
+  let pgControlDataSize = 0
+
   for (const file of files) {
     const filePath = pgDataDir + file.name
 
@@ -74,7 +78,43 @@ export async function loadTar(
 
     // Write the file or directory
     if (file.type === REGTYPE) {
+      // [NMT CUSTOMIZATION] Log pg_control extraction details
+      if (file.name.endsWith('pg_control') || file.name.includes('/pg_control')) {
+        pgControlExtracted = true
+        pgControlDataSize = file.data?.length ?? 0
+        console.info(
+          `[loadTar] Extracting pg_control: name="${file.name}", ` +
+          `tarball.size=${file.size ?? 'undefined'}, ` +
+          `data.length=${pgControlDataSize}, ` +
+          `data is Uint8Array=${file.data instanceof Uint8Array}`
+        )
+        if (pgControlDataSize > 0 && pgControlDataSize < 100) {
+          // Log first few bytes if file is suspiciously small
+          console.warn(`[loadTar] pg_control data is suspiciously small! First bytes:`,
+            Array.from(file.data.slice(0, Math.min(20, pgControlDataSize))).map(b => b.toString(16).padStart(2, '0')).join(' ')
+          )
+        } else if (pgControlDataSize === 0) {
+          console.error(`[loadTar] pg_control has ZERO data bytes! This will cause _pgl_backend to crash.`)
+        }
+      }
+
       FS.writeFile(filePath, file.data)
+
+      // [NMT CUSTOMIZATION] Verify pg_control was written correctly
+      if (file.name.endsWith('pg_control') || file.name.includes('/pg_control')) {
+        try {
+          const stat = FS.stat(filePath)
+          console.info(`[loadTar] pg_control stat after write: size=${stat.size}, mode=${stat.mode}`)
+          if (stat.size === 0) {
+            console.error(`[loadTar] CRITICAL: pg_control has 0 bytes after FS.writeFile! Write failed silently.`)
+          } else if (stat.size !== file.data.length) {
+            console.warn(`[loadTar] pg_control size mismatch: expected ${file.data.length}, got ${stat.size}`)
+          }
+        } catch (e) {
+          console.error(`[loadTar] Failed to stat pg_control after write:`, e)
+        }
+      }
+
       FS.utime(
         filePath,
         dateToUnixTimestamp(file.modifyTime),
@@ -84,6 +124,95 @@ export async function loadTar(
       FS.mkdir(filePath)
     }
   }
+
+  // [NMT CUSTOMIZATION] Verify pg_control was extracted
+  if (!pgControlExtracted) {
+    console.error(`[loadTar] pg_control was NOT found in tarball! Files extracted: ${files.length}`)
+  } else {
+    console.info(`[loadTar] pg_control extraction complete: ${pgControlDataSize} bytes written`)
+  }
+
+  // =============================================================================
+  // [NMT CUSTOMIZATION] Post-load validation and pg_control state logging
+  // =============================================================================
+  // RATIONALE: When using loadDataDir with a prebuilt tarball, _pgl_backend()
+  // can crash with "RuntimeError: unreachable" if the datadir is invalid or
+  // has an unexpected pg_control state. By validating immediately after load
+  // and logging the pg_control state, we can:
+  // 1. Fail fast on corrupt/incomplete tarballs before initdb runs
+  // 2. Capture diagnostic info about the database state for debugging
+  //
+  // UPSTREAMABLE: This improves error messages and debugging for all users
+  // of loadDataDir, especially when using dumpDataDir-generated tarballs.
+  //
+  // See: docs/debugging/pglite-opfs-root-cause-analysis.md
+  // =============================================================================
+  const requiredPaths = [
+    'PG_VERSION',
+    'postgresql.conf',
+    'base',
+    'global',
+    'global/pg_control',
+  ]
+  const missingPaths: string[] = []
+
+  for (const reqPath of requiredPaths) {
+    const fullPath = pgDataDir + '/' + reqPath
+    if (!FS.analyzePath(fullPath).exists) {
+      missingPaths.push(reqPath)
+    }
+  }
+
+  if (missingPaths.length > 0) {
+    const errorMsg = `[loadTar] VALIDATION FAILED: Missing required paths: ${missingPaths.join(', ')}`
+    console.error(errorMsg)
+    throw new Error(`Invalid PGlite datadir: missing required paths: ${missingPaths.join(', ')}`)
+  }
+
+  // Log pg_control state for debugging
+  // pg_control structure (from PostgreSQL src/include/catalog/pg_control.h):
+  // Offset 0-7:   system_identifier (uint64)
+  // Offset 8-11:  pg_control_version (uint32)
+  // Offset 12-15: catalog_version_no (uint32)
+  // Offset 16-19: state (DBState enum = uint32)
+  //
+  // DBState values:
+  // 0 = DB_STARTUP, 1 = DB_SHUTDOWNED, 2 = DB_SHUTDOWNED_IN_RECOVERY,
+  // 3 = DB_SHUTDOWNING, 4 = DB_IN_CRASH_RECOVERY, 5 = DB_IN_ARCHIVE_RECOVERY,
+  // 6 = DB_IN_PRODUCTION
+  try {
+    const pgControlPath = pgDataDir + '/global/pg_control'
+    const pgControlData = FS.readFile(pgControlPath, { encoding: 'binary' })
+    const fileSize = pgControlData.length
+
+    // First check file size - pg_control should be 8192 bytes
+    if (fileSize === 0) {
+      console.error(`[loadTar] pg_control file is EMPTY (0 bytes)! This will cause _pgl_backend to crash.`)
+    } else if (fileSize < 20) {
+      console.error(`[loadTar] pg_control file is too small (${fileSize} bytes, need at least 20)! Corrupt tarball?`)
+    } else {
+      // pg_control state is at offset 16, stored as uint32 (4 bytes, little-endian)
+      const stateView = new DataView(new Uint8Array(pgControlData).buffer)
+      const state = stateView.getUint32(16, true) // little-endian, OFFSET 16
+      const stateNames: Record<number, string> = {
+        0: 'DB_STARTUP',
+        1: 'DB_SHUTDOWNED',
+        2: 'DB_SHUTDOWNED_IN_RECOVERY',
+        3: 'DB_SHUTDOWNING',
+        4: 'DB_IN_CRASH_RECOVERY',
+        5: 'DB_IN_ARCHIVE_RECOVERY',
+        6: 'DB_IN_PRODUCTION',
+      }
+      console.info(
+        `[loadTar] pg_control state = ${state} (${stateNames[state] || 'UNKNOWN'}), ` +
+        `size = ${fileSize} bytes`
+      )
+    }
+  } catch (e) {
+    console.warn(`[loadTar] Could not read pg_control state:`, e)
+  }
+
+  console.info(`[loadTar] Validation passed: all ${requiredPaths.length} required paths present`)
 }
 
 function readDirectory(FS: FS, path: string) {

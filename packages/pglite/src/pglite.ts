@@ -653,11 +653,118 @@ export class PGlite
     }
 
     // (re)start backed after possible initdb boot/single.
-    // [NMT CUSTOMIZATION] Promote START and COMPLETE logs to console.info for production visibility
+    // =============================================================================
+    // [NMT CUSTOMIZATION] Pre-backend datadir validation and pg_control state logging
+    // =============================================================================
+    // RATIONALE: _pgl_backend() can crash with "RuntimeError: unreachable" when
+    // starting with a prebuilt datadir via loadDataDir. This is a WASM-level crash
+    // that provides no context. By validating critical files and logging the
+    // pg_control state BEFORE calling _pgl_backend(), we can:
+    // 1. Identify missing or corrupt files that would cause the crash
+    // 2. Capture the pg_control state to understand if it's a state mismatch issue
+    // 3. Provide actionable diagnostic information for debugging
+    //
+    // UPSTREAMABLE: This improves debugging for all users of loadDataDir.
+    //
+    // See: docs/debugging/pglite-opfs-root-cause-analysis.md
+    // =============================================================================
     console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} START`)
+    console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} Pre-check: validating critical files...`)
+
+    const criticalFiles = ['PG_VERSION', 'postgresql.conf', 'global/pg_control']
+    for (const file of criticalFiles) {
+      const path = PGDATA + '/' + file
+      const exists = this.mod.FS.analyzePath(path).exists
+      console.info(
+        `[PGliteInternal][init][wasm.backend] ${stamp()} File check: ${file} = ${exists ? 'OK' : 'MISSING'}`
+      )
+    }
+
+    // Read and log pg_control state (helps diagnose loadDataDir issues)
+    // pg_control state values (from PostgreSQL src/include/catalog/pg_control.h):
+    // 0 = DB_STARTUP, 1 = DB_SHUTDOWNED, 2 = DB_SHUTDOWNED_IN_RECOVERY,
+    // pg_control structure (from PostgreSQL src/include/catalog/pg_control.h):
+    // Offset 0-7:   system_identifier (uint64)
+    // Offset 8-11:  pg_control_version (uint32)
+    // Offset 12-15: catalog_version_no (uint32)
+    // Offset 16-19: state (DBState enum = uint32)
+    //
+    // DBState values:
+    // 0 = DB_STARTUP, 1 = DB_SHUTDOWNED, 2 = DB_SHUTDOWNED_IN_RECOVERY,
+    // 3 = DB_SHUTDOWNING, 4 = DB_IN_CRASH_RECOVERY, 5 = DB_IN_ARCHIVE_RECOVERY,
+    // 6 = DB_IN_PRODUCTION
+    try {
+      const pgControlPath = PGDATA + '/global/pg_control'
+      const pgControlData = this.mod.FS.readFile(pgControlPath, { encoding: 'binary' })
+      const fileSize = pgControlData.length
+
+      // First check file size - pg_control should be 8192 bytes
+      if (fileSize === 0) {
+        console.error(`[PGliteInternal][init][wasm.backend] ${stamp()} pg_control is EMPTY (0 bytes)! This will cause crash.`)
+      } else if (fileSize < 20) {
+        console.error(`[PGliteInternal][init][wasm.backend] ${stamp()} pg_control too small (${fileSize} bytes)! Corrupt?`)
+      } else {
+        // pg_control state is at offset 16, stored as uint32 (4 bytes, little-endian)
+        const stateView = new DataView(new Uint8Array(pgControlData).buffer)
+        const state = stateView.getUint32(16, true) // little-endian, OFFSET 16
+        const stateNames: Record<number, string> = {
+          0: 'DB_STARTUP',
+          1: 'DB_SHUTDOWNED',
+          2: 'DB_SHUTDOWNED_IN_RECOVERY',
+          3: 'DB_SHUTDOWNING',
+          4: 'DB_IN_CRASH_RECOVERY',
+          5: 'DB_IN_ARCHIVE_RECOVERY',
+          6: 'DB_IN_PRODUCTION',
+        }
+        console.info(
+          `[PGliteInternal][init][wasm.backend] ${stamp()} pg_control state = ${state} ` +
+          `(${stateNames[state] || 'UNKNOWN'}), size = ${fileSize} bytes`
+        )
+      }
+    } catch (e) {
+      console.error(`[PGliteInternal][init][wasm.backend] ${stamp()} ERROR reading pg_control:`, e)
+    }
+
+    // =============================================================================
+    // [NMT CUSTOMIZATION] Wrap _pgl_backend() in try/catch for crash recovery
+    // =============================================================================
+    // RATIONALE: If _pgl_backend() crashes (e.g., "RuntimeError: unreachable"),
+    // OPFS-AHP access handles are leaked because closeFs() is never called.
+    // This causes subsequent connection attempts to fail with
+    // "NoModificationAllowedError: Access handle is already open".
+    //
+    // By catching the error and calling emergencyCloseAllHandles(), we:
+    // 1. Prevent handle leaks that would block future attempts
+    // 2. Provide clear error logging for debugging
+    // 3. Enable retry logic in the application layer
+    //
+    // UPSTREAMABLE: This fixes a real bug where handles leak on crash.
+    //
+    // See: docs/debugging/pglite-opfs-root-cause-analysis.md
+    // =============================================================================
     const backendStart = _now()
-    this.mod._pgl_backend()
-    console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} COMPLETE (took ${(_now() - backendStart).toFixed(1)}ms)`)
+    try {
+      this.mod._pgl_backend()
+      console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} COMPLETE (took ${(_now() - backendStart).toFixed(1)}ms)`)
+    } catch (backendError) {
+      console.error(
+        `[PGliteInternal][init][wasm.backend] ${stamp()} CRASHED after ${(_now() - backendStart).toFixed(1)}ms:`,
+        backendError
+      )
+
+      // Emergency cleanup of OPFS handles to prevent leaks
+      if (this.fs && 'emergencyCloseAllHandles' in this.fs) {
+        console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} Performing emergency handle cleanup...`)
+        try {
+          await (this.fs as any).emergencyCloseAllHandles()
+          console.info(`[PGliteInternal][init][wasm.backend] ${stamp()} Emergency cleanup complete`)
+        } catch (cleanupError) {
+          console.error(`[PGliteInternal][init][wasm.backend] ${stamp()} Emergency cleanup failed:`, cleanupError)
+        }
+      }
+
+      throw backendError
+    }
 
     // [NMT CUSTOMIZATION] Wrap syncToFs with stage guard
     await withInitStageGuard(

@@ -128,20 +128,115 @@ export class OpfsAhpFS extends BaseFilesystem {
     this.pg!.Module.FS.quit()
   }
 
+  // =============================================================================
+  // [NMT CUSTOMIZATION] Emergency cleanup of all access handles
+  // =============================================================================
+  // RATIONALE: If PGlite crashes during initialization (e.g., _pgl_backend()
+  // throws "RuntimeError: unreachable"), closeFs() is never called and all
+  // OPFS-AHP sync access handles are leaked. This causes subsequent connection
+  // attempts to fail with "NoModificationAllowedError: Access handle is already open".
+  //
+  // This method differs from closeFs() in that it:
+  // 1. Catches and logs errors for each handle (doesn't throw on first error)
+  // 2. Clears internal maps to prevent reuse of stale handles
+  // 3. Does NOT call FS.quit() since the FS may be in an inconsistent state
+  //
+  // UPSTREAMABLE: This fixes a real bug where handles leak on crash.
+  //
+  // See: docs/debugging/pglite-opfs-root-cause-analysis.md
+  // =============================================================================
+  async emergencyCloseAllHandles(): Promise<void> {
+    console.info('[OpfsAhpFS] emergencyCloseAllHandles: starting emergency cleanup...')
+    let closedCount = 0
+    let errorCount = 0
+
+    // Close all sync access handles from the main pool
+    for (const [path, sh] of this.#sh.entries()) {
+      try {
+        sh.close()
+        closedCount++
+        console.debug(`[OpfsAhpFS] emergencyCloseAllHandles: closed handle for ${path}`)
+      } catch (e) {
+        console.warn(`[OpfsAhpFS] emergencyCloseAllHandles: error closing handle for ${path}:`, e)
+        errorCount++
+      }
+    }
+    this.#sh.clear()
+
+    // Clear file handles map (these don't need explicit closing, but clear for consistency)
+    this.#fh.clear()
+
+    // Clear open handle tracking
+    this.#openHandlePaths.clear()
+    this.#openHandleIds.clear()
+
+    // Close any unsynced handles
+    for (const sh of this.#unsyncedSH) {
+      try {
+        sh.close()
+        closedCount++
+      } catch (e) {
+        console.warn('[OpfsAhpFS] emergencyCloseAllHandles: error closing unsynced handle:', e)
+        errorCount++
+      }
+    }
+    this.#unsyncedSH.clear()
+
+    // Close state handle (critical for releasing the lock on state.txt)
+    if (this.#stateSH) {
+      try {
+        this.#stateSH.flush()
+        this.#stateSH.close()
+        console.debug('[OpfsAhpFS] emergencyCloseAllHandles: closed state handle')
+        closedCount++
+      } catch (e) {
+        console.warn('[OpfsAhpFS] emergencyCloseAllHandles: error closing state handle:', e)
+        errorCount++
+      }
+    }
+
+    console.info(
+      `[OpfsAhpFS] emergencyCloseAllHandles: complete (closed=${closedCount}, errors=${errorCount})`
+    )
+  }
+
   async #init() {
+    // =============================================================================
+    // [NMT CUSTOMIZATION] Handle creation logging for debugging
+    // =============================================================================
+    // RATIONALE: When debugging Access Handle leaks or initialization failures,
+    // it's helpful to see exactly when handles are created. This logging helps
+    // trace the handle lifecycle and identify where leaks occur.
+    //
+    // UPSTREAMABLE: Pure diagnostics, no behavior change.
+    //
+    // See: docs/debugging/pglite-opfs-root-cause-analysis.md
+    // =============================================================================
+    console.info(`[OpfsAhpFS] #init: starting OPFS-AHP initialization for dataDir=${this.dataDir}`)
+
     this.#opfsRootAh = await navigator.storage.getDirectory()
+    console.debug('[OpfsAhpFS] #init: got OPFS root directory handle')
+
     this.#rootAh = await this.#resolveOpfsDirectory(this.dataDir!, {
       create: true,
     })
+    console.debug(`[OpfsAhpFS] #init: resolved root directory handle for ${this.dataDir}`)
+
     this.#dataDirAh = await this.#resolveOpfsDirectory(DATA_DIR, {
       from: this.#rootAh,
       create: true,
     })
+    console.debug(`[OpfsAhpFS] #init: resolved data directory handle for ${DATA_DIR}`)
 
     this.#stateFH = await this.#rootAh.getFileHandle(STATE_FILE, {
       create: true,
     })
+    console.debug(`[OpfsAhpFS] #init: got file handle for ${STATE_FILE}`)
+
+    // This is a critical point - creating the sync access handle acquires an exclusive lock
+    console.info('[OpfsAhpFS] #init: creating state sync access handle (exclusive lock)...')
     this.#stateSH = await (this.#stateFH as any).createSyncAccessHandle()
+    console.info('[OpfsAhpFS] #init: state sync access handle created successfully')
 
     const stateAB = new ArrayBuffer(this.#stateSH.getSize())
     this.#stateSH.read(stateAB, { at: 0 })
@@ -639,9 +734,59 @@ export class OpfsAhpFS extends BaseFilesystem {
     if (!sh) {
       throw new FsError('EBADF', 'Bad file descriptor')
     }
-    const ret = sh.write(new Uint8Array(buffer.buffer as ArrayBuffer, offset, length), {
+
+    // [NMT CUSTOMIZATION] Debug buffer type issue
+    // The buffer parameter is typed as Uint8Array but may actually be an ArrayBuffer
+    // due to incorrect casting in base.ts stream_ops.write (line 467: buffer.buffer as unknown as Uint8Array)
+    const isPgControl = path.includes('pg_control')
+
+    // Cast to any to bypass TypeScript's type narrowing - at runtime buffer could be ArrayBuffer
+    const bufferAny = buffer as unknown
+    const bufferTypeName = (bufferAny as { constructor?: { name?: string } })?.constructor?.name ?? 'unknown'
+
+    if (isPgControl) {
+      console.info(
+        `[OpfsAhpFS.write] pg_control write: path="${path}", ` +
+        `buffer type=${bufferTypeName}, ` +
+        `offset=${offset}, length=${length}, position=${position}`
+      )
+    }
+
+    // Handle the case where buffer is actually an ArrayBuffer (not Uint8Array)
+    // This happens because base.ts incorrectly passes buffer.buffer instead of buffer
+    let dataToWrite: Uint8Array
+    if (bufferAny instanceof ArrayBuffer) {
+      // buffer is actually an ArrayBuffer, use it directly
+      if (isPgControl) {
+        console.info(`[OpfsAhpFS.write] pg_control: buffer is ArrayBuffer, creating Uint8Array view directly`)
+      }
+      dataToWrite = new Uint8Array(bufferAny, offset, length)
+    } else if (bufferAny instanceof Uint8Array) {
+      // buffer is a Uint8Array as expected
+      if (isPgControl) {
+        console.info(`[OpfsAhpFS.write] pg_control: buffer is Uint8Array, using buffer.buffer`)
+      }
+      dataToWrite = new Uint8Array(bufferAny.buffer as ArrayBuffer, offset, length)
+    } else {
+      // Unknown type - log and try the original approach
+      console.error(`[OpfsAhpFS.write] pg_control: UNEXPECTED buffer type: ${bufferTypeName}`)
+      dataToWrite = new Uint8Array(buffer.buffer as ArrayBuffer, offset, length)
+    }
+
+    if (isPgControl) {
+      console.info(`[OpfsAhpFS.write] pg_control: dataToWrite.length=${dataToWrite.length}, first 20 bytes: ${Array.from(dataToWrite.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
+    }
+
+    // Cast to any to bypass TypeScript's strict BufferSource type checking
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ret = sh.write(dataToWrite as any, {
       at: position,
     })
+
+    if (isPgControl) {
+      console.info(`[OpfsAhpFS.write] pg_control: sh.write returned ${ret}`)
+    }
+
     if (path.startsWith('/pg_wal')) {
       this.#unsyncedSH.add(sh)
     }
