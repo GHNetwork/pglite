@@ -734,59 +734,12 @@ export class OpfsAhpFS extends BaseFilesystem {
     if (!sh) {
       throw new FsError('EBADF', 'Bad file descriptor')
     }
-
-    // [NMT CUSTOMIZATION] Debug buffer type issue
-    // The buffer parameter is typed as Uint8Array but may actually be an ArrayBuffer
-    // due to incorrect casting in base.ts stream_ops.write (line 467: buffer.buffer as unknown as Uint8Array)
-    const isPgControl = path.includes('pg_control')
-
-    // Cast to any to bypass TypeScript's type narrowing - at runtime buffer could be ArrayBuffer
-    const bufferAny = buffer as unknown
-    const bufferTypeName = (bufferAny as { constructor?: { name?: string } })?.constructor?.name ?? 'unknown'
-
-    if (isPgControl) {
-      console.info(
-        `[OpfsAhpFS.write] pg_control write: path="${path}", ` +
-        `buffer type=${bufferTypeName}, ` +
-        `offset=${offset}, length=${length}, position=${position}`
-      )
-    }
-
-    // Handle the case where buffer is actually an ArrayBuffer (not Uint8Array)
-    // This happens because base.ts incorrectly passes buffer.buffer instead of buffer
-    let dataToWrite: Uint8Array
-    if (bufferAny instanceof ArrayBuffer) {
-      // buffer is actually an ArrayBuffer, use it directly
-      if (isPgControl) {
-        console.info(`[OpfsAhpFS.write] pg_control: buffer is ArrayBuffer, creating Uint8Array view directly`)
-      }
-      dataToWrite = new Uint8Array(bufferAny, offset, length)
-    } else if (bufferAny instanceof Uint8Array) {
-      // buffer is a Uint8Array as expected
-      if (isPgControl) {
-        console.info(`[OpfsAhpFS.write] pg_control: buffer is Uint8Array, using buffer.buffer`)
-      }
-      dataToWrite = new Uint8Array(bufferAny.buffer as ArrayBuffer, offset, length)
-    } else {
-      // Unknown type - log and try the original approach
-      console.error(`[OpfsAhpFS.write] pg_control: UNEXPECTED buffer type: ${bufferTypeName}`)
-      dataToWrite = new Uint8Array(buffer.buffer as ArrayBuffer, offset, length)
-    }
-
-    if (isPgControl) {
-      console.info(`[OpfsAhpFS.write] pg_control: dataToWrite.length=${dataToWrite.length}, first 20 bytes: ${Array.from(dataToWrite.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`)
-    }
-
-    // Cast to any to bypass TypeScript's strict BufferSource type checking
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ret = sh.write(dataToWrite as any, {
+    // Note: buffer is actually an ArrayBuffer passed from base.ts (buffer.buffer)
+    // This is intentional - base.ts extracts the underlying ArrayBuffer from Int8Array
+    // and we create a Uint8Array view into it here
+    const ret = sh.write(new Uint8Array(buffer as unknown as ArrayBuffer, offset, length), {
       at: position,
     })
-
-    if (isPgControl) {
-      console.info(`[OpfsAhpFS.write] pg_control: sh.write returned ${ret}`)
-    }
-
     if (path.startsWith('/pg_wal')) {
       this.#unsyncedSH.add(sh)
     }
