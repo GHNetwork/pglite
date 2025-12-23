@@ -16,4 +16,8 @@ node_modules
 
 docs/.vitepress/dist
 docs/.vitepress/cache
+
+# Turbo build artifacts
 turbo-build.log
+**/.turbo/
+.turbo/

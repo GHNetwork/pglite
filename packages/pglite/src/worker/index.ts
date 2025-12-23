@@ -206,6 +206,27 @@ export class PGliteWorker
         this.#debug = await this.#rpc('getDebugLevel')
         this.#ready = true
         console.info(`[PGliteInternal][worker-main] ${stamp()} ready flag set, debug level=${this.#debug}`)
+      } else if (event.data.type === 'connection-error') {
+        // FIX 4 (2025-12-23): Handle connection failure due to health check
+        // This happens when the database is corrupted and fails a simple query
+        console.error(`[PGliteInternal][worker-main] ${stamp()} ❌ CONNECTION FAILED: ${event.data.error?.message}`)
+        console.error(`[PGliteInternal][worker-main] Database health check failed - database may be corrupted`)
+        console.error(`[PGliteInternal][worker-main] 💡 Recovery: Clear site data and reload`)
+
+        // Dispatch an error event that the application can listen for
+        const errorEvent = new CustomEvent('connection-error', {
+          detail: {
+            code: event.data.error?.code || 'UNKNOWN',
+            message: event.data.error?.message || 'Connection failed'
+          }
+        })
+        this.#eventTarget.dispatchEvent(errorEvent)
+
+        // Also dispatch a generic 'error' event for backwards compatibility
+        this.#eventTarget.dispatchEvent(new ErrorEvent('error', {
+          message: event.data.error?.message || 'Database connection failed',
+          error: new Error(event.data.error?.message || 'Database connection failed')
+        }))
       }
     })
 
@@ -627,7 +648,7 @@ export async function worker({ init }: WorkerOptions) {
 // Track first RPC call for diagnostic purposes
 let firstRpcHandled = false
 
-function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
+async function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
   const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
 
   if (connectedTabs.has(tabId)) {
@@ -696,9 +717,44 @@ function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
     }
   })
 
-  // Send a message to the tab to let it know it's connected
-  console.debug(`[PGliteInternal][worker-thread] posting 'connected' to tab ${tabId}`)
-  tabChannel.postMessage({ type: 'connected' })
+  // FIX 4 (2025-12-23): Validate database health before sending 'connected'
+  // This prevents connecting to a corrupted database that appears "ready" but
+  // will fail on actual queries with I/O errors like "Operation canceled"
+  const healthCheckStart = _now()
+  try {
+    // Wait for database to be fully ready
+    await pg.waitReady
+
+    // Perform a simple health check query
+    // This catches corruption that manifests as I/O errors on database files
+    await pg.query('SELECT 1 as health_check')
+
+    const healthCheckMs = (_now() - healthCheckStart).toFixed(1)
+    console.debug(`[PGliteInternal][worker-thread] health check passed for tab ${tabId} (${healthCheckMs}ms)`)
+
+    // Send a message to the tab to let it know it's connected
+    console.debug(`[PGliteInternal][worker-thread] posting 'connected' to tab ${tabId}`)
+    tabChannel.postMessage({ type: 'connected' })
+  } catch (healthError: any) {
+    // Health check failed - database is corrupted or I/O errors
+    console.error(`[PGliteInternal][worker-thread] ❌ Health check FAILED for tab ${tabId}:`, healthError)
+    console.error(`[PGliteInternal][worker-thread] Database may be corrupted. Error: ${healthError.message}`)
+
+    // Remove from connected tabs since we're not actually connected
+    connectedTabs.delete(tabId)
+
+    // Notify the tab of the connection failure
+    tabChannel.postMessage({
+      type: 'connection-error',
+      error: {
+        message: `Database health check failed: ${healthError.message}`,
+        code: 'HEALTH_CHECK_FAILED'
+      }
+    })
+
+    // Clean up the tab channel
+    tabChannel.close()
+  }
 }
 
 function makeWorkerApi(tabId: string, db: PGlite) {
