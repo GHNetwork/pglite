@@ -1,0 +1,2 @@
+import{j as t}from"../chunk-LXLR7NCL.js";t();var e=async(n,i)=>({bundlePath:new URL("../dict_int.tar.gz",import.meta.url)}),a={name:"dict_int",setup:e};export{a as dict_int};
+//# sourceMappingURL=dict_int.js.map

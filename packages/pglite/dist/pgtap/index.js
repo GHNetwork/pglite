@@ -1,0 +1,2 @@
+import{j as e}from"../chunk-LXLR7NCL.js";e();var n=async(s,t)=>({emscriptenOpts:t,bundlePath:new URL("../pgtap.tar.gz",import.meta.url)}),i={name:"pgtap",setup:n};export{i as pgtap};
+//# sourceMappingURL=index.js.map
