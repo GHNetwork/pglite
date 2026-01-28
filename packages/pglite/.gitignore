@@ -1,5 +1,7 @@
 node_modules
-release/*
-!release/*.d.ts
+# NMT: We track release/* in git for CI builds (contains pre-built WASM binaries)
+# The upstream pglite project ignores these files since they build them separately
+# release/*
+# !release/*.d.ts
 dist
 pgdata*
