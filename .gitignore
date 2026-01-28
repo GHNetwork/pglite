@@ -2,10 +2,8 @@
 .vscode
 
 node_modules
-# [NMT] We INCLUDE dist/ folders in git to avoid needing tsup/tsx in CI builds
-# Original lines removed:
-#   /packages/pglite/dist
-#   /packages/**/dist
+/packages/pglite/dist
+/packages/**/dist
 /packages/pglite/pgdata-test
 /packages/pglite/package-lock.json
 /build

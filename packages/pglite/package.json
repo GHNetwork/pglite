@@ -158,15 +158,14 @@
     "test:integration": "pnpm test:runtimes && pnpm test:web",
     "test:clean": "rm -rf ./pgdata-test",
     "build:js": "tsup && tsx scripts/bundle-wasm.ts",
-    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
+    "build": "pnpm build:js",
     "dev": "concurrently \"tsup --watch\" \"sleep 1 && tsx scripts/bundle-wasm.ts\" \"pnpm dev-server\"",
     "dev-server": "pnpm http-server ../",
     "lint": "eslint ./src ./tests --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write ./src ./tests",
     "typecheck": "tsc --noEmit",
     "stylecheck": "pnpm lint && prettier --check ./src ./tests",
-    "prepublishOnly": "echo 'ERROR: This is a forked package for NMT Pathways. DO NOT publish to npm!' && exit 1",
-    "build:original": "pnpm build:js"
+    "prepublishOnly": "echo 'ERROR: This is a forked package for NMT Pathways. DO NOT publish to npm!' && exit 1"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.1",

@@ -19,15 +19,14 @@
     "directory": "packages/pg-protocol"
   },
   "scripts": {
-    "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
+    "build": "tsup",
     "check:exports": "attw . --pack --profile node16",
     "test": "vitest",
     "lint": "eslint ./src ./test",
     "format": "prettier --write ./src ./test",
     "typecheck": "tsc",
     "stylecheck": "eslint ./src ./test && prettier --check ./src ./test",
-    "prepublishOnly": "pnpm check:exports",
-    "build:original": "tsup"
+    "prepublishOnly": "echo 'ERROR: This is a forked package for NMT Pathways. DO NOT publish to npm!' && exit 1"
   },
   "types": "dist/index.d.ts",
   "main": "dist/index.cjs",

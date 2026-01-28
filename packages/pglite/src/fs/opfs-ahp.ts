@@ -88,7 +88,12 @@ export class OpfsAhpFS extends BaseFilesystem {
 
   state!: State
   lastCheckpoint = 0
-  checkpointInterval = 1000 * 60 // 1 minute
+  // [NMT CUSTOMIZATION] Reduced from 60 seconds to 5 seconds to minimize data loss window
+  // RATIONALE: With the original 60-second interval, data changes could be lost if the user
+  // closed the tab, reloaded the page, or the browser crashed before the checkpoint.
+  // A 5-second interval provides much better durability while maintaining acceptable performance.
+  // Combined with relaxedDurability: false, this ensures near-immediate data persistence.
+  checkpointInterval = 1000 * 5 // 5 seconds (was 60 seconds)
   poolCounter = 0
 
   #unsyncedSH = new Set<FileSystemSyncAccessHandle>()
