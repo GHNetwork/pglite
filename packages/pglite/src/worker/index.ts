@@ -613,14 +613,31 @@ export async function worker({ init }: WorkerOptions) {
   const dbPromise = init(options)
 
   // Start listening for messages from tabs
+  // Rate-limit 'tab-here' logging to avoid console spam (tabs send this every 16ms until connected)
+  let lastTabHereLogTime = 0
+  let suppressedTabHereCount = 0
+  const TAB_HERE_LOG_INTERVAL_MS = 1000
+
   broadcastChannel.onmessage = async (event) => {
     const msg = event.data
     switch (msg.type) {
-      case 'tab-here':
-        // A new tab has joined,
-        console.debug(`[PGliteInternal][worker-thread] received 'tab-here' from tab ${msg.id}`)
+      case 'tab-here': {
+        // A new tab has joined — rate-limit the log to once per second
+        const now = Date.now()
+        if (now - lastTabHereLogTime >= TAB_HERE_LOG_INTERVAL_MS) {
+          if (suppressedTabHereCount > 0) {
+            console.debug(`[PGliteInternal][worker-thread] received 'tab-here' from tab ${msg.id} (+${suppressedTabHereCount} suppressed)`)
+          } else {
+            console.debug(`[PGliteInternal][worker-thread] received 'tab-here' from tab ${msg.id}`)
+          }
+          lastTabHereLogTime = now
+          suppressedTabHereCount = 0
+        } else {
+          suppressedTabHereCount++
+        }
         connectTab(msg.id, await dbPromise, connectedTabs)
         break
+      }
     }
   }
 
