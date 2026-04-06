@@ -1,2 +1,2 @@
-import{j as e}from"../chunk-ZPAWJA53.js";e();var t=async(n,s)=>({bundlePath:new URL("../unaccent.tar.gz",import.meta.url)}),c={name:"unaccent",setup:t};export{c as unaccent};
+import{j as e}from"../chunk-AYAJAOZF.js";e();var t=async(n,s)=>({bundlePath:new URL("../unaccent.tar.gz",import.meta.url)}),c={name:"unaccent",setup:t};export{c as unaccent};
 //# sourceMappingURL=unaccent.js.map

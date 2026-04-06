@@ -1,2 +1,2 @@
-import{j as e}from"../chunk-ZPAWJA53.js";e();var t=async(s,n)=>({bundlePath:new URL("../pg_freespacemap.tar.gz",import.meta.url)}),r={name:"pg_freespacemap",setup:t};export{r as pg_freespacemap};
+import{j as e}from"../chunk-AYAJAOZF.js";e();var t=async(s,n)=>({bundlePath:new URL("../pg_freespacemap.tar.gz",import.meta.url)}),r={name:"pg_freespacemap",setup:t};export{r as pg_freespacemap};
 //# sourceMappingURL=pg_freespacemap.js.map

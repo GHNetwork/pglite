@@ -1,2 +1,2 @@
-import{j as e}from"../chunk-ZPAWJA53.js";e();var t=async(s,n)=>({bundlePath:new URL("../hstore.tar.gz",import.meta.url)}),o={name:"hstore",setup:t};export{o as hstore};
+import{j as e}from"../chunk-AYAJAOZF.js";e();var t=async(s,n)=>({bundlePath:new URL("../hstore.tar.gz",import.meta.url)}),o={name:"hstore",setup:t};export{o as hstore};
 //# sourceMappingURL=hstore.js.map
