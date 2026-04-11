@@ -819,6 +819,7 @@ async function addNotifyTriggersToTables(
       CREATE OR REPLACE TRIGGER "_notify_trigger_${table.schema_oid}_${table.table_oid}"
       AFTER INSERT OR UPDATE OR DELETE ON "${table.schema_name}"."${table.table_name}"
       FOR EACH STATEMENT EXECUTE FUNCTION "_notify_${table.schema_oid}_${table.table_oid}"();
+      ALTER TABLE "${table.schema_name}"."${table.table_name}" ENABLE ALWAYS TRIGGER "_notify_trigger_${table.schema_oid}_${table.table_oid}";
       `
     })
     .join('\n')

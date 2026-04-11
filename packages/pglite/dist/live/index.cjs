@@ -128,6 +128,7 @@
       CREATE OR REPLACE TRIGGER "_notify_trigger_${r.schema_oid}_${r.table_oid}"
       AFTER INSERT OR UPDATE OR DELETE ON "${r.schema_name}"."${r.table_name}"
       FOR EACH STATEMENT EXECUTE FUNCTION "_notify_${r.schema_oid}_${r.table_oid}"();
+      ALTER TABLE "${r.schema_name}"."${r.table_name}" ENABLE ALWAYS TRIGGER "_notify_trigger_${r.schema_oid}_${r.table_oid}";
       `).join(`
 `);s.trim()!==""&&await e.exec(s),t.map(r=>n.add(`${r.schema_oid}_${r.table_oid}`))}var z=(e,t)=>{for(let n of e)n(t)},ct=(e,t)=>{for(let n of e)n(t)};0&&(module.exports={live});
 //# sourceMappingURL=index.cjs.map
