@@ -25,6 +25,7 @@ export class PGliteWorker
 {
   #initPromise: Promise<void>
   #debug: DebugLevel = 0
+  #fatalConnectionError: Error | null = null
 
   #ready = false
   #closed = false
@@ -189,6 +190,12 @@ export class PGliteWorker
 
     this.#broadcastChannel.addEventListener('message', async (event) => {
       if (event.data.type === 'leader-here') {
+        if (this.#fatalConnectionError || this.#closed) {
+          console.warn(
+            `[PGliteInternal][worker-main] ignoring 'leader-here' after terminal connection failure`,
+          )
+          return
+        }
         console.debug(`[PGliteInternal][worker-main] received 'leader-here' on broadcast channel`)
         this.#connected = false
         this.#eventTarget.dispatchEvent(new Event('leader-change'))
@@ -209,6 +216,15 @@ export class PGliteWorker
       } else if (event.data.type === 'connection-error') {
         // FIX 4 (2025-12-23): Handle connection failure due to health check
         // This happens when the database is corrupted and fails a simple query
+        const fatalError = new Error(
+          event.data.error?.message || 'Database connection failed',
+        )
+        Object.assign(fatalError, event.data.error)
+
+        this.#fatalConnectionError = fatalError
+        this.#connected = false
+        this.#ready = false
+
         console.error(`[PGliteInternal][worker-main] ${stamp()} ❌ CONNECTION FAILED: ${event.data.error?.message}`)
         console.error(`[PGliteInternal][worker-main] Database health check failed - database may be corrupted`)
         console.error(`[PGliteInternal][worker-main] 💡 Recovery: Clear site data and reload`)
@@ -245,13 +261,29 @@ export class PGliteWorker
     // We don't await this as it will result in a deadlock
     // It immediately takes out the transaction lock as so another query
     console.debug(`[PGliteInternal][worker-main] ${stamp()} initiating _initArrayTypes() (not awaited)`)
-    this._initArrayTypes()
+    this._initArrayTypes().catch((error) => {
+      if (this.#fatalConnectionError || this.#closed) {
+        console.warn(
+          `[PGliteInternal][worker-main] ${stamp()} skipping _initArrayTypes() after terminal connection failure: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        return
+      }
+
+      console.error(
+        `[PGliteInternal][worker-main] ${stamp()} _initArrayTypes() failed unexpectedly:`,
+        error,
+      )
+    })
 
     const totalElapsed = (_now() - t0).toFixed(1)
     console.info(`[PGliteInternal][worker-main] ${stamp()} ========== PGliteWorker #init COMPLETE (total ${totalElapsed}ms) ==========`)
   }
 
   async #leaderNotifyLoop() {
+    if (this.#closed || this.#fatalConnectionError) {
+      return
+    }
+
     if (!this.#connected) {
       this.#broadcastChannel!.postMessage({
         type: 'tab-here',
@@ -265,6 +297,10 @@ export class PGliteWorker
     method: Method,
     ...args: Parameters<WorkerApi[Method]>
   ): Promise<ReturnType<WorkerApi[Method]>> {
+    if (this.#fatalConnectionError) {
+      throw this.#fatalConnectionError
+    }
+
     const callId = uuid()
     const message: WorkerRpcCall<Method> = {
       type: 'rpc-call',
@@ -311,20 +347,47 @@ export class PGliteWorker
   }
 
   get waitReady() {
-    return new Promise<void>((resolve) => {
-      this.#initPromise.then(() => {
-        if (!this.#connected) {
-          resolve(
-            new Promise<void>((resolve) => {
-              this.#eventTarget.addEventListener('connected', () => {
-                resolve()
-              })
-            }),
+    return new Promise<void>((resolve, reject) => {
+      this.#initPromise
+        .then(() => {
+          if (this.#fatalConnectionError) {
+            reject(this.#fatalConnectionError)
+            return
+          }
+
+          if (this.#connected) {
+            resolve()
+            return
+          }
+
+          const connectedListener = () => {
+            cleanup()
+            resolve()
+          }
+
+          const connectionErrorListener = () => {
+            cleanup()
+            reject(
+              this.#fatalConnectionError ??
+                new Error('Database connection failed before ready state'),
+            )
+          }
+
+          const cleanup = () => {
+            this.#eventTarget.removeEventListener('connected', connectedListener)
+            this.#eventTarget.removeEventListener(
+              'connection-error',
+              connectionErrorListener,
+            )
+          }
+
+          this.#eventTarget.addEventListener('connected', connectedListener)
+          this.#eventTarget.addEventListener(
+            'connection-error',
+            connectionErrorListener,
           )
-        } else {
-          resolve()
-        }
-      })
+        })
+        .catch(reject)
     })
   }
 
