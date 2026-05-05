@@ -101,8 +101,8 @@ export class OpfsAhpFS extends BaseFilesystem {
   constructor(
     dataDir: string,
     {
-      initialPoolSize = 1000,
-      maintainedPoolSize = 100,
+      initialPoolSize = 3000,
+      maintainedPoolSize = 300,
       debug = false,
     }: OpfsAhpOptions = {},
   ) {

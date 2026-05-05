@@ -64,6 +64,9 @@ export async function loadTar(
   let pgControlExtracted = false
   let pgControlDataSize = 0
 
+  // [NMT CUSTOMIZATION] Optimize directory creation by caching existing paths
+  const existingDirs = new Set<string>()
+
   for (const file of files) {
     const filePath = pgDataDir + file.name
 
@@ -71,8 +74,11 @@ export async function loadTar(
     const dirPath = filePath.split('/').slice(0, -1)
     for (let i = 1; i <= dirPath.length; i++) {
       const dir = dirPath.slice(0, i).join('/')
-      if (!FS.analyzePath(dir).exists) {
-        FS.mkdir(dir)
+      if (!existingDirs.has(dir)) {
+        if (!FS.analyzePath(dir).exists) {
+          FS.mkdir(dir)
+        }
+        existingDirs.add(dir)
       }
     }
 
