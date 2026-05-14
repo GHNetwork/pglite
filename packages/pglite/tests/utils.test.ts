@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { debounceMutex } from '../src/utils'
+import { coerceUntypedLimitOffsetParams, debounceMutex } from '../src/utils'
+
+describe('coerceUntypedLimitOffsetParams', () => {
+  it('casts untyped LIMIT/OFFSET placeholders used by extended queries', () => {
+    expect(coerceUntypedLimitOffsetParams('SELECT * FROM paths WHERE id = $1 LIMIT $2 OFFSET $3')).toBe(
+      'SELECT * FROM paths WHERE id = $1 LIMIT $2::int OFFSET $3::int',
+    )
+  })
+
+  it('does not double-cast placeholders that are already typed', () => {
+    expect(coerceUntypedLimitOffsetParams('SELECT * FROM paths LIMIT $1::int OFFSET $2::int')).toBe(
+      'SELECT * FROM paths LIMIT $1::int OFFSET $2::int',
+    )
+  })
+})
 
 describe('debounceMutex', () => {
   const delay = (ms: number) =>

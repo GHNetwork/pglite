@@ -3,6 +3,19 @@ import { serialize as serializeProtocol } from '@electric-sql/pg-protocol'
 import { parseDescribeStatementResults } from './parse.js'
 import { TEXT } from './types.js'
 
+/**
+ * PostgreSQL cannot infer an untyped bind parameter when it is used only as a
+ * LIMIT/OFFSET value (for example: `LIMIT $3`). Cast those placeholders before
+ * parse/describe so callers such as Drizzle and live-query formatting do not
+ * fail with "could not determine data type of parameter $n".
+ */
+export function coerceUntypedLimitOffsetParams(query: string): string {
+  return query.replace(
+    /\b(LIMIT|OFFSET)\s+(\$\d+)\b(?!\s*::)/gi,
+    '$1 $2::int',
+  )
+}
+
 // =============================================================================
 // DIAGNOSTIC LOGGING UTILITIES (Phase 1 - direct console logging)
 // =============================================================================
@@ -255,6 +268,8 @@ export async function formatQuery(
   params?: any[] | null,
   tx?: Transaction | PGliteInterface,
 ) {
+  query = coerceUntypedLimitOffsetParams(query)
+
   if (!params || params.length === 0) {
     // no params so no formatting needed
     return query

@@ -27,6 +27,7 @@ import {
   BackendMessage,
 } from '@electric-sql/pg-protocol/messages'
 import { makePGliteError } from './errors.js'
+import { coerceUntypedLimitOffsetParams } from './utils.js'
 
 export abstract class BasePGlite
   implements Pick<PGliteInterface, 'query' | 'sql' | 'exec' | 'transaction'>
@@ -238,6 +239,8 @@ export abstract class BasePGlite
     options?: QueryOptions,
   ): Promise<Results<T>> {
     return await this._runExclusiveQuery(async () => {
+      query = coerceUntypedLimitOffsetParams(query)
+
       // We need to parse, bind and execute a query with parameters
       this.#log('runQuery', query, params, options)
       await this._handleBlob(options?.blob)
@@ -374,6 +377,8 @@ export abstract class BasePGlite
     query: string,
     options?: QueryOptions,
   ): Promise<DescribeQueryResult> {
+    query = coerceUntypedLimitOffsetParams(query)
+
     let messages = []
     try {
       await this.#execProtocolNoSync(
