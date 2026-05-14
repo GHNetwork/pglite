@@ -43,6 +43,16 @@ export interface Filesystem {
    * Close the filesystem.
    */
   closeFs(): Promise<void>
+
+  /**
+   * Optional hook for filesystems that can release expensive idle resources.
+   */
+  releaseIdleHandles?(): Promise<void>
+
+  /**
+   * Optional hook for filesystems that need to reacquire resources before use.
+   */
+  restoreHandles?(): Promise<void>
 }
 
 /**

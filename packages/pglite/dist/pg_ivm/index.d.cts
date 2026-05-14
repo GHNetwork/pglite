@@ -1,4 +1,4 @@
-import { d as PGliteInterface } from '../pglite-DcjyZxt2.cjs';
+import { d as PGliteInterface } from '../pglite-D6C6P8SX.cjs';
 
 declare const pg_ivm: {
     name: string;

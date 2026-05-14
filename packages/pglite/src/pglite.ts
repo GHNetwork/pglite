@@ -59,6 +59,8 @@ export class PGlite
   #listenMutex = new Mutex()
   #fsSyncMutex = new Mutex()
   #fsSyncScheduled = false
+  #fsIdleReleaseTimer: ReturnType<typeof setTimeout> | undefined
+  #fsActiveOperations = 0
 
   readonly debug: DebugLevel = 0
 
@@ -927,6 +929,12 @@ export class PGlite
    * @returns The direct message data response produced by Postgres
    */
   execProtocolRawSync(message: Uint8Array) {
+    if ((this.fs as any)?.idleHandlesReleased) {
+      throw new Error(
+        'PGlite OPFS-AHP handles are idle-released; use async execProtocolRaw/execProtocol so handles can be restored before execution.',
+      )
+    }
+
     const mod = this.mod!
 
     this.#readOffset = 0
@@ -966,11 +974,16 @@ export class PGlite
     message: Uint8Array,
     { syncToFs = true }: ExecProtocolOptions = {},
   ) {
-    const data = this.execProtocolRawSync(message)
-    if (syncToFs) {
-      await this.syncToFs()
+    await this.#beginFsOperation()
+    try {
+      const data = this.execProtocolRawSync(message)
+      if (syncToFs) {
+        await this.syncToFs()
+      }
+      return data
+    } finally {
+      this.#endFsOperation()
     }
-    return data
   }
 
   /**
@@ -1113,6 +1126,7 @@ export class PGlite
       await this.#fsSyncMutex.runExclusive(async () => {
         this.#fsSyncScheduled = false
         await this.fs!.syncToFs(this.#relaxedDurability)
+        this.#scheduleFsIdleHandleRelease()
       })
     }
 
@@ -1238,8 +1252,52 @@ export class PGlite
     compression?: DumpTarCompressionOptions,
   ): Promise<File | Blob> {
     await this._checkReady()
-    const dbname = this.dataDir?.split('/').pop() ?? 'pgdata'
-    return this.fs!.dumpTar(dbname, compression)
+    await this.#beginFsOperation()
+    try {
+      const dbname = this.dataDir?.split('/').pop() ?? 'pgdata'
+      return this.fs!.dumpTar(dbname, compression)
+    } finally {
+      this.#endFsOperation()
+    }
+  }
+
+  async #beginFsOperation() {
+    if (this.#fsIdleReleaseTimer) {
+      clearTimeout(this.#fsIdleReleaseTimer)
+      this.#fsIdleReleaseTimer = undefined
+    }
+    this.#fsActiveOperations++
+    try {
+      await this.fs?.restoreHandles?.()
+    } catch (e) {
+      this.#fsActiveOperations = Math.max(0, this.#fsActiveOperations - 1)
+      this.#scheduleFsIdleHandleRelease()
+      throw e
+    }
+  }
+
+  #endFsOperation() {
+    this.#fsActiveOperations = Math.max(0, this.#fsActiveOperations - 1)
+    if (this.#fsActiveOperations === 0) {
+      this.#scheduleFsIdleHandleRelease()
+    }
+  }
+
+  #scheduleFsIdleHandleRelease() {
+    if (!this.fs?.releaseIdleHandles || this.#closing || this.#closed || this.#fsActiveOperations > 0) {
+      return
+    }
+    if (this.#fsIdleReleaseTimer) {
+      clearTimeout(this.#fsIdleReleaseTimer)
+    }
+    this.#fsIdleReleaseTimer = setTimeout(() => {
+      this.#fsIdleReleaseTimer = undefined
+      this.#fsSyncMutex.runExclusive(async () => {
+        if (!this.#closing && !this.#closed && this.#fsActiveOperations === 0) {
+          await this.fs?.releaseIdleHandles?.()
+        }
+      })
+    }, 15_000)
   }
 
   /**

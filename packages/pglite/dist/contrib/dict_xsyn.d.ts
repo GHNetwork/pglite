@@ -1,4 +1,4 @@
-import { d as PGliteInterface } from '../pglite-DcjyZxt2.js';
+import { d as PGliteInterface } from '../pglite-D6C6P8SX.js';
 
 declare const dict_xsyn: {
     name: string;

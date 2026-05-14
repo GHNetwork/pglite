@@ -1,4 +1,4 @@
-import { l as Extensions, q as PGliteOptions, x as BasePGlite, d as PGliteInterface, r as PGliteInterfaceExtensions, D as DebugLevel, n as ExecProtocolResult, B as BackendMessage, T as Transaction, y as DumpTarCompressionOptions, b as PGlite } from '../pglite-DcjyZxt2.js';
+import { l as Extensions, q as PGliteOptions, x as BasePGlite, d as PGliteInterface, r as PGliteInterfaceExtensions, D as DebugLevel, n as ExecProtocolResult, B as BackendMessage, T as Transaction, y as DumpTarCompressionOptions, b as PGlite } from '../pglite-D6C6P8SX.js';
 
 type PGliteWorkerOptions<E extends Extensions = Extensions> = PGliteOptions<E> & {
     meta?: any;

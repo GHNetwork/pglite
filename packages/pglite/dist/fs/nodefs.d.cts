@@ -1,4 +1,4 @@
-import { E as EmscriptenBuiltinFilesystem, b as PGlite, c as PostgresMod } from '../pglite-DcjyZxt2.cjs';
+import { E as EmscriptenBuiltinFilesystem, b as PGlite, c as PostgresMod } from '../pglite-D6C6P8SX.cjs';
 
 declare class NodeFS extends EmscriptenBuiltinFilesystem {
     protected rootDir: string;

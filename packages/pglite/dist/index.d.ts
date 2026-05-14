@@ -1,5 +1,5 @@
-import { B as BackendMessage$1, P as Parser$1, Q as QueryOptions, R as Results, M as Mode, a as BufferParameter, E as EmscriptenBuiltinFilesystem, b as PGlite, c as PostgresMod, d as PGliteInterface, T as Transaction } from './pglite-DcjyZxt2.js';
-export { D as DebugLevel, u as DescribeQueryResult, o as DumpDataDirResult, g as ExecProtocolOptions, n as ExecProtocolResult, j as Extension, k as ExtensionNamespace, i as ExtensionSetup, h as ExtensionSetupResult, l as Extensions, F as FilesystemType, I as InitializedExtensions, r as PGliteInterfaceExtensions, q as PGliteOptions, f as ParserOptions, s as Row, e as RowMode, S as SerializerOptions, m as messages, p as postgresMod, t as types } from './pglite-DcjyZxt2.js';
+import { B as BackendMessage$1, P as Parser$1, Q as QueryOptions, R as Results, M as Mode, a as BufferParameter, E as EmscriptenBuiltinFilesystem, b as PGlite, c as PostgresMod, d as PGliteInterface, T as Transaction } from './pglite-D6C6P8SX.js';
+export { D as DebugLevel, u as DescribeQueryResult, o as DumpDataDirResult, g as ExecProtocolOptions, n as ExecProtocolResult, j as Extension, k as ExtensionNamespace, i as ExtensionSetup, h as ExtensionSetupResult, l as Extensions, F as FilesystemType, I as InitializedExtensions, r as PGliteInterfaceExtensions, q as PGliteOptions, f as ParserOptions, s as Row, e as RowMode, S as SerializerOptions, m as messages, p as postgresMod, t as types } from './pglite-D6C6P8SX.js';
 
 /**
  * This function is used to parse the results of either a simple or extended query.

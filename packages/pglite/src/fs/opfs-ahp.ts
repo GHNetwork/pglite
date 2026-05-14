@@ -81,6 +81,7 @@ export class OpfsAhpFS extends BaseFilesystem {
 
   #fh: Map<string, FileSystemFileHandle> = new Map()
   #sh: Map<string, FileSystemSyncAccessHandle> = new Map()
+  #idleHandlesReleased = false
 
   #handleIdCounter = 0
   #openHandlePaths: Map<number, string> = new Map()
@@ -101,8 +102,12 @@ export class OpfsAhpFS extends BaseFilesystem {
   constructor(
     dataDir: string,
     {
-      initialPoolSize = 3000,
-      maintainedPoolSize = 300,
+      // [NMT CUSTOMIZATION] Keep URL-based OPFS-AHP starts inside Meridian's
+      // production resource envelope. The current Pathways prebuilt database
+      // contains 1529 regular files, so cold loadDataDir hydration needs a
+      // larger initial pool than the steady-state retained spare pool.
+      initialPoolSize = 1800,
+      maintainedPoolSize = 128,
       debug = false,
     }: OpfsAhpOptions = {},
   ) {
@@ -121,6 +126,79 @@ export class OpfsAhpFS extends BaseFilesystem {
     await this.maintainPool()
     if (!relaxedDurability) {
       this.flush()
+    }
+  }
+
+  get idleHandlesReleased(): boolean {
+    return this.#idleHandlesReleased
+  }
+
+  async restoreHandles(): Promise<void> {
+    if (!this.#idleHandlesReleased) {
+      return
+    }
+
+    const filenames: string[] = []
+    const restoreBackingFile = async (filename: string) => {
+      if (this.#sh.has(filename)) {
+        return
+      }
+      const fh = this.#fh.get(filename) ?? await this.#dataDirAh.getFileHandle(filename)
+      const sh: FileSystemSyncAccessHandle = await (
+        fh as any
+      ).createSyncAccessHandle()
+      this.#fh.set(filename, fh)
+      this.#sh.set(filename, sh)
+    }
+
+    const walk = (node: Node) => {
+      if (node.type === 'file') {
+        filenames.push(node.backingFilename)
+        return
+      }
+      for (const child of Object.values(node.children)) {
+        walk(child)
+      }
+    }
+
+    walk(this.state.root)
+    for (const filename of this.state.pool) {
+      filenames.push(filename)
+    }
+
+    // Reopen handles in bounded batches. Restoring every file with a single
+    // Promise.all() can recreate the Chromium OPFS access-handle race that the
+    // startup path avoids by limiting concurrent createSyncAccessHandle() calls.
+    const batchSize = 128
+    for (let i = 0; i < filenames.length; i += batchSize) {
+      await Promise.all(filenames.slice(i, i + batchSize).map(restoreBackingFile))
+    }
+    this.#idleHandlesReleased = false
+  }
+
+  async releaseIdleHandles(): Promise<void> {
+    if (this.#idleHandlesReleased || this.#sh.size === 0) {
+      return
+    }
+
+    this.flush()
+
+    let closedCount = 0
+    for (const [filename, sh] of this.#sh.entries()) {
+      try {
+        sh.close()
+        closedCount++
+      } catch (e) {
+        console.warn('[OpfsAhpFS] releaseIdleHandles: failed to close handle', filename, e)
+      }
+    }
+
+    this.#sh.clear()
+    this.#unsyncedSH.clear()
+    this.#idleHandlesReleased = true
+
+    if (closedCount > 0) {
+      console.info(`[OpfsAhpFS] releaseIdleHandles: closed ${closedCount} idle sync access handles`)
     }
   }
 
@@ -312,7 +390,15 @@ export class OpfsAhpFS extends BaseFilesystem {
     }
     await walk(this.state.root)
 
-    // Open all pool file handles
+    // [NMT CUSTOMIZATION] Existing databases may have been created with a much
+    // larger historical pool. Trim closed pool files before opening them so a
+    // warm start does not transiently acquire hundreds/thousands of stale sync
+    // access handles only to close them immediately afterwards.
+    if (!isNewState) {
+      await this.#trimClosedPoolFiles(this.maintainedPoolSize)
+    }
+
+    // Open remaining pool file handles
     const poolPromises: Promise<void>[] = []
     for (const filename of this.state.pool) {
       poolPromises.push(
@@ -388,6 +474,30 @@ export class OpfsAhpFS extends BaseFilesystem {
     await Promise.all(promises)
   }
 
+  async #trimClosedPoolFiles(size: number) {
+    const targetSize = Math.max(0, size)
+    const removeCount = this.state.pool.length - targetSize
+    if (removeCount <= 0) {
+      return
+    }
+
+    const failedRemovals: string[] = []
+    for (let i = 0; i < removeCount; i++) {
+      const filename = this.state.pool.pop()
+      if (!filename) break
+
+      try {
+        await this.#dataDirAh.removeEntry(filename)
+      } catch (e) {
+        console.warn('Error trimming OPFS AHP pool file', filename, e)
+        failedRemovals.push(filename)
+      }
+    }
+
+    this.state.pool.push(...failedRemovals)
+    await this.checkpointState()
+  }
+
   _createPoolFileState(filename: string) {
     this.state.pool.push(filename)
   }
@@ -450,8 +560,12 @@ export class OpfsAhpFS extends BaseFilesystem {
 
   lstat(path: string): FsStats {
     const node = this.#resolvePath(path)
+    const sh = node.type === 'file' ? this.#sh.get(node.backingFilename) : null
+    if (node.type === 'file' && !sh) {
+      throw new FsError('EBADF', 'OPFS-AHP sync access handles are not active')
+    }
     const size =
-      node.type === 'file' ? this.#sh.get(node.backingFilename)!.getSize() : 0
+      node.type === 'file' ? sh!.getSize() : 0
     const blksize = 4096
     return {
       dev: 0,

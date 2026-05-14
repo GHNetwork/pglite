@@ -1,4 +1,4 @@
-import { v as BaseFilesystem, b as PGlite, c as PostgresMod, w as FsStats } from '../pglite-DcjyZxt2.cjs';
+import { v as BaseFilesystem, b as PGlite, c as PostgresMod, w as FsStats } from '../pglite-D6C6P8SX.cjs';
 
 interface OpfsAhpOptions {
     initialPoolSize?: number;
@@ -61,6 +61,9 @@ declare class OpfsAhpFS extends BaseFilesystem {
         emscriptenOpts: Partial<PostgresMod>;
     }>;
     syncToFs(relaxedDurability?: boolean): Promise<void>;
+    get idleHandlesReleased(): boolean;
+    restoreHandles(): Promise<void>;
+    releaseIdleHandles(): Promise<void>;
     closeFs(): Promise<void>;
     emergencyCloseAllHandles(): Promise<void>;
     maintainPool(size?: number): Promise<void>;

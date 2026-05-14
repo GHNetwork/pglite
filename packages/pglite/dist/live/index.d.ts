@@ -1,4 +1,4 @@
-import { R as Results, d as PGliteInterface } from '../pglite-DcjyZxt2.js';
+import { R as Results, d as PGliteInterface } from '../pglite-D6C6P8SX.js';
 
 interface LiveQueryOptions<T = {
     [key: string]: any;
