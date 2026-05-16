@@ -786,10 +786,60 @@ async function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>)
           }
         } catch (error) {
           console.error(error)
+          // Preserve diagnostic context across the worker RPC boundary.
+          // `makePGliteError` attaches `query`, `params`, and `queryOptions` to
+          // DatabaseError instances; without this serialization the main thread
+          // receives only `.message` and loses the failing SQL/parameters —
+          // making errors like "could not determine data type of parameter $N"
+          // un-debuggable. The main thread rehydrates these fields via
+          // `Object.assign(error, message.error)` (see line ~322).
+          const err = error as Error & {
+            query?: string
+            params?: unknown[]
+            queryOptions?: unknown
+            code?: string
+            severity?: string
+            detail?: string
+            hint?: string
+            position?: string
+            internalPosition?: string
+            internalQuery?: string
+            where?: string
+            schema?: string
+            table?: string
+            column?: string
+            dataType?: string
+            constraint?: string
+            file?: string
+            line?: string
+            routine?: string
+          }
           tabChannel.postMessage({
             type: 'rpc-error',
             callId,
-            error: { message: (error as Error).message },
+            error: {
+              message: err.message,
+              name: err.name,
+              ...(err.query !== undefined ? { query: err.query } : {}),
+              ...(err.params !== undefined ? { params: err.params } : {}),
+              ...(err.queryOptions !== undefined ? { queryOptions: err.queryOptions } : {}),
+              ...(err.code !== undefined ? { code: err.code } : {}),
+              ...(err.severity !== undefined ? { severity: err.severity } : {}),
+              ...(err.detail !== undefined ? { detail: err.detail } : {}),
+              ...(err.hint !== undefined ? { hint: err.hint } : {}),
+              ...(err.position !== undefined ? { position: err.position } : {}),
+              ...(err.internalPosition !== undefined ? { internalPosition: err.internalPosition } : {}),
+              ...(err.internalQuery !== undefined ? { internalQuery: err.internalQuery } : {}),
+              ...(err.where !== undefined ? { where: err.where } : {}),
+              ...(err.schema !== undefined ? { schema: err.schema } : {}),
+              ...(err.table !== undefined ? { table: err.table } : {}),
+              ...(err.column !== undefined ? { column: err.column } : {}),
+              ...(err.dataType !== undefined ? { dataType: err.dataType } : {}),
+              ...(err.constraint !== undefined ? { constraint: err.constraint } : {}),
+              ...(err.file !== undefined ? { file: err.file } : {}),
+              ...(err.line !== undefined ? { line: err.line } : {}),
+              ...(err.routine !== undefined ? { routine: err.routine } : {}),
+            },
           } satisfies WorkerRpcError)
         }
         break

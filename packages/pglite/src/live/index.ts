@@ -197,7 +197,13 @@ const setup = async (pg: PGliteInterface, _emscriptenOpts: any) => {
                   throw e
                 }
                 await init()
-                run(count + 1)
+                // FIX: `return await` so that (a) we wait for the retry to
+                // complete before resolving the outer promise and (b) we do NOT
+                // fall through to the `runResultCallbacks` call below with a
+                // stale / uninitialized `results` value.  Without the `await`,
+                // callbacks were invoked twice — once immediately with old data
+                // and once after the recursive call finished.
+                return await run(count + 1)
               } else {
                 throw e
               }
@@ -239,7 +245,11 @@ const setup = async (pg: PGliteInterface, _emscriptenOpts: any) => {
       // If there are no callbacks, unsubscribe from the notify triggers
       const unsubscribe = async (callback?: (results: Results<T>) => void) => {
         if (callback) {
-          callbacks = callbacks.filter((callback) => callback !== callback)
+          // FIX: use a distinct parameter name (cb) to avoid shadowing the outer
+          // `callback` parameter. The previous `(callback) => callback !== callback`
+          // always returned false, causing every selective unsubscribe to drop ALL
+          // callbacks and tear down the live query prematurely.
+          callbacks = callbacks.filter((cb) => cb !== callback)
         } else {
           callbacks = []
         }
@@ -502,7 +512,11 @@ const setup = async (pg: PGliteInterface, _emscriptenOpts: any) => {
         callback?: (changes: Array<Change<T>>) => void,
       ) => {
         if (callback) {
-          callbacks = callbacks.filter((callback) => callback !== callback)
+          // FIX: use a distinct parameter name (cb) to avoid shadowing the outer
+          // `callback` parameter. The previous `(callback) => callback !== callback`
+          // always returned false, causing every selective unsubscribe to drop ALL
+          // callbacks and tear down the live query prematurely.
+          callbacks = callbacks.filter((cb) => cb !== callback)
         } else {
           callbacks = []
         }
@@ -662,7 +676,11 @@ const setup = async (pg: PGliteInterface, _emscriptenOpts: any) => {
 
       const unsubscribe = async (callback?: (results: Results<T>) => void) => {
         if (callback) {
-          callbacks = callbacks.filter((callback) => callback !== callback)
+          // FIX: use a distinct parameter name (cb) to avoid shadowing the outer
+          // `callback` parameter. The previous `(callback) => callback !== callback`
+          // always returned false, causing every selective unsubscribe to drop ALL
+          // callbacks and tear down the live query prematurely.
+          callbacks = callbacks.filter((cb) => cb !== callback)
         } else {
           callbacks = []
         }
@@ -826,7 +844,7 @@ async function addNotifyTriggersToTables(
   if (triggers.trim() !== '') {
     await tx.exec(triggers)
   }
-  tables.map((table) =>
+  tables.forEach((table) =>
     tableNotifyTriggersAdded.add(`${table.schema_oid}_${table.table_oid}`),
   )
 }
