@@ -27,6 +27,62 @@ export const IN_NODE =
   typeof process.versions === 'object' &&
   typeof process.versions.node === 'string'
 
+type PGliteAssetFile = 'pglite.wasm' | 'pglite.data'
+type PGliteAssetKind = 'wasm' | 'data'
+
+function getBrowserLocationOrigin(): string {
+  const locationOrigin =
+    typeof globalThis === 'object' &&
+    'location' in globalThis &&
+    globalThis.location &&
+    typeof globalThis.location.origin === 'string' &&
+    globalThis.location.origin !== 'null'
+      ? globalThis.location.origin
+      : undefined
+
+  if (!locationOrigin) {
+    throw new Error(
+      '[PGliteInternal] Unable to resolve browser asset URL without location.origin',
+    )
+  }
+
+  return locationOrigin
+}
+
+function resolveNodePGliteAssetUrl(fileName: PGliteAssetFile): URL {
+  const moduleDirUrl = import.meta.url.slice(0, import.meta.url.lastIndexOf('/') + 1)
+  return new URL(`${moduleDirUrl}../release/${fileName}`)
+}
+
+function resolveBrowserPGliteAssetUrl(fileName: PGliteAssetFile): URL {
+  return new URL(`/${fileName}`, getBrowserLocationOrigin())
+}
+
+/**
+ * Resolve PGlite binary assets without forcing Vite to emit duplicate hashed
+ * copies in browser builds.
+ *
+ * Pathways serves immutable copies from `/pglite.wasm` and `/pglite.data`
+ * via the app's public directory and service worker precache. Keeping browser
+ * fetches on those root URLs preserves offline-first startup while avoiding
+ * duplicate `_nuxt/` asset emission from static `new URL('../release/...')`
+ * analysis during application bundling.
+ *
+ * Node.js still resolves the package-local `release/` files so package builds,
+ * tests, and non-browser runtimes retain their existing behavior.
+ */
+function resolvePGliteAssetUrl(fileName: PGliteAssetFile): URL {
+  if (IN_NODE) {
+    return resolveNodePGliteAssetUrl(fileName)
+  }
+
+  return resolveBrowserPGliteAssetUrl(fileName)
+}
+
+function getPGliteAssetFileName(kind: PGliteAssetKind): PGliteAssetFile {
+  return ['pglite', kind].join('.') as PGliteAssetFile
+}
+
 let wasmDownloadPromise: Promise<Response> | undefined
 let wasmDownloadStartTime: number | undefined
 
@@ -40,7 +96,7 @@ export async function startWasmDownload() {
     return
   }
   wasmDownloadStartTime = _now()
-  const moduleUrl = new URL('../release/pglite.wasm', import.meta.url)
+  const moduleUrl = resolvePGliteAssetUrl(getPGliteAssetFileName('wasm'))
   console.debug(`[PGliteInternal][wasm] startWasmDownload: initiating fetch from ${moduleUrl.href}`)
 
   wasmDownloadPromise = fetch(moduleUrl).then((response) => {
@@ -87,7 +143,7 @@ export async function instantiateWasm(
     }
   }
 
-  const moduleUrl = new URL('../release/pglite.wasm', import.meta.url)
+  const moduleUrl = resolvePGliteAssetUrl(getPGliteAssetFileName('wasm'))
   console.debug(`[PGliteInternal][wasm] ${stamp()} instantiateWasm: no cached module, will load from ${moduleUrl.href}`)
 
   if (IN_NODE) {
@@ -184,7 +240,7 @@ export async function getFsBundle(): Promise<ArrayBuffer> {
   const t0 = _now()
   const stamp = () => _stamp(t0)
 
-  const fsBundleUrl = new URL('../release/pglite.data', import.meta.url)
+  const fsBundleUrl = resolvePGliteAssetUrl(getPGliteAssetFileName('data'))
   console.debug(`[PGliteInternal][fsBundle] ${stamp()} getFsBundle: entry (url=${fsBundleUrl.href})`)
 
   if (IN_NODE) {

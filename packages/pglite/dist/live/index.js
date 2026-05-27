@@ -1,4 +1,4 @@
-import{v as I,w as O,x as C}from"../chunk-M6BJUVZ4.js";import{j as P}from"../chunk-AYAJAOZF.js";P();var M=5,U=async(d,y)=>{let $=new Set,p={async query(e,A,a){let m,l,_;if(typeof e!="string"&&(m=e.signal,A=e.params,a=e.callback,l=e.offset,_=e.limit,e=e.query),l===void 0!=(_===void 0))throw new Error("offset and limit must be provided together");let i=l!==void 0&&_!==void 0,T;if(i&&(typeof l!="number"||isNaN(l)||typeof _!="number"||isNaN(_)))throw new Error("offset and limit must be numbers");let E=a?[a]:[],o=I().replace(/-/g,""),g=!1,v,w,S=async()=>{await d.transaction(async t=>{let s=A&&A.length>0?await O(d,e,A,t):e;await t.exec(`CREATE OR REPLACE TEMP VIEW live_query_${o}_view AS ${s}`);let u=await q(t,`live_query_${o}_view`);await F(t,u,$),i?(await t.exec(`
+import{v as I,w as O,x as C}from"../chunk-QRUTNAAX.js";import{j as P}from"../chunk-AYAJAOZF.js";P();var M=5,U=async(d,y)=>{let $=new Set,p={async query(e,A,a){let m,l,_;if(typeof e!="string"&&(m=e.signal,A=e.params,a=e.callback,l=e.offset,_=e.limit,e=e.query),l===void 0!=(_===void 0))throw new Error("offset and limit must be provided together");let i=l!==void 0&&_!==void 0,T;if(i&&(typeof l!="number"||isNaN(l)||typeof _!="number"||isNaN(_)))throw new Error("offset and limit must be numbers");let E=a?[a]:[],o=I().replace(/-/g,""),g=!1,v,w,S=async()=>{await d.transaction(async t=>{let s=A&&A.length>0?await O(d,e,A,t):e;await t.exec(`CREATE OR REPLACE TEMP VIEW live_query_${o}_view AS ${s}`);let u=await q(t,`live_query_${o}_view`);await F(t,u,$),i?(await t.exec(`
               PREPARE live_query_${o}_get(int, int) AS
               SELECT * FROM live_query_${o}_view
               LIMIT $1 OFFSET $2;
@@ -25,7 +25,7 @@ import{v as I,w as O,x as C}from"../chunk-M6BJUVZ4.js";import{j as P}from"../chu
                 curr AS (SELECT LAG("${a}") OVER () as __after__, * FROM live_query_${i}_state${f}),
                 data_diff AS (
                   -- INSERT operations: Include all columns
-                  SELECT 
+                  SELECT
                     'INSERT' AS __op__,
                     ${u.map(({column_name:n})=>`curr."${n}" AS "${n}"`).join(`,
 `)},
@@ -35,7 +35,7 @@ import{v as I,w as O,x as C}from"../chunk-M6BJUVZ4.js";import{j as P}from"../chu
                   WHERE prev.${a} IS NULL
                 UNION ALL
                   -- DELETE operations: Include only the primary key
-                  SELECT 
+                  SELECT
                     'DELETE' AS __op__,
                     ${u.map(({column_name:n,data_type:L,udt_name:b})=>n===a?`prev."${n}" AS "${n}"`:`NULL${L==="USER-DEFINED"?`::${b}`:""} AS "${n}"`).join(`,
 `)},
@@ -45,18 +45,18 @@ import{v as I,w as O,x as C}from"../chunk-M6BJUVZ4.js";import{j as P}from"../chu
                   WHERE curr.${a} IS NULL
                 UNION ALL
                   -- UPDATE operations: Include only changed columns
-                  SELECT 
+                  SELECT
                     'UPDATE' AS __op__,
-                    ${u.map(({column_name:n,data_type:L,udt_name:b})=>n===a?`curr."${n}" AS "${n}"`:`CASE 
-                              WHEN curr."${n}" IS DISTINCT FROM prev."${n}" 
+                    ${u.map(({column_name:n,data_type:L,udt_name:b})=>n===a?`curr."${n}" AS "${n}"`:`CASE
+                              WHEN curr."${n}" IS DISTINCT FROM prev."${n}"
                               THEN curr."${n}"
                               ELSE NULL${L==="USER-DEFINED"?`::${b}`:""}
                               END AS "${n}"`).join(`,
 `)},
                       ARRAY(SELECT unnest FROM unnest(ARRAY[${u.filter(({column_name:n})=>n!==a).map(({column_name:n})=>`CASE
-                              WHEN curr."${n}" IS DISTINCT FROM prev."${n}" 
-                              THEN '${n}' 
-                              ELSE NULL 
+                              WHEN curr."${n}" IS DISTINCT FROM prev."${n}"
+                              THEN '${n}'
+                              ELSE NULL
                               END`).join(", ")}]) WHERE unnest IS NOT NULL) AS __changed_columns__
                   FROM curr
                   INNER JOIN prev ON curr.${a} = prev.${a}
@@ -64,7 +64,7 @@ import{v as I,w as O,x as C}from"../chunk-M6BJUVZ4.js";import{j as P}from"../chu
                 )
               SELECT * FROM data_diff;
             `)}g=await Promise.all(s.map(f=>r.listen(`"table_change__${f.schema_oid}__${f.table_oid}"`,async()=>{w()})))})};await v();let w=C(async()=>{if(_.length===0&&o)return;let r=!1;for(let t=0;t<5;t++)try{await d.transaction(async s=>{await s.exec(`
-                INSERT INTO live_query_${i}_state${E} 
+                INSERT INTO live_query_${i}_state${E}
                   SELECT * FROM live_query_${i}_view;
               `),o=await s.query(`EXECUTE live_query_${i}_diff${E};`),E=E===1?2:1,await s.exec(`
                 TRUNCATE live_query_${i}_state${E};
