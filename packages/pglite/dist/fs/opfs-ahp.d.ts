@@ -3,6 +3,10 @@ import { v as BaseFilesystem, b as PGlite, c as PostgresMod, w as FsStats } from
 interface OpfsAhpOptions {
     initialPoolSize?: number;
     maintainedPoolSize?: number;
+    /** Maximum concurrent OPFS sync-access-handle opens/creates per batch. */
+    maxConcurrentHandles?: number;
+    /** Optional pause between handle batches to let Chromium's OPFS lock manager breathe. */
+    handleBatchDelayMs?: number;
     debug?: boolean;
 }
 interface FileSystemSyncAccessHandle {
@@ -52,11 +56,13 @@ declare class OpfsAhpFS extends BaseFilesystem {
     readonly dataDir: string;
     readonly initialPoolSize: number;
     readonly maintainedPoolSize: number;
+    readonly maxConcurrentHandles: number;
+    readonly handleBatchDelayMs: number;
     state: State;
     lastCheckpoint: number;
     checkpointInterval: number;
     poolCounter: number;
-    constructor(dataDir: string, { initialPoolSize, maintainedPoolSize, debug, }?: OpfsAhpOptions);
+    constructor(dataDir: string, { initialPoolSize, maintainedPoolSize, maxConcurrentHandles, handleBatchDelayMs, debug, }?: OpfsAhpOptions);
     init(pg: PGlite, opts: Partial<PostgresMod>): Promise<{
         emscriptenOpts: Partial<PostgresMod>;
     }>;

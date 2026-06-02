@@ -3,6 +3,14 @@ import { l as Extensions, q as PGliteOptions, x as BasePGlite, d as PGliteInterf
 type PGliteWorkerOptions<E extends Extensions = Extensions> = PGliteOptions<E> & {
     meta?: any;
     id?: string;
+    /**
+     * Explicit allowlist for worker-local extension namespace RPC.
+     *
+     * Shape: `{ namespaceName: ['methodName'] }`. Only listed methods are
+     * callable through `callWorkerExtension()`. This intentionally does not
+     * expose arbitrary worker object access.
+     */
+    extensionRpcAllowlist?: Record<string, readonly string[]>;
 };
 declare class PGliteWorker extends BasePGlite implements PGliteInterface, AsyncDisposable {
     #private;
@@ -17,6 +25,15 @@ declare class PGliteWorker extends BasePGlite implements PGliteInterface, AsyncD
      * @returns A promise that resolves to the PGlite instance when it's ready.
      */
     static create<O extends PGliteWorkerOptions>(worker: Worker, options?: O): Promise<PGliteWorker & PGliteInterfaceExtensions<O['extensions']>>;
+    /**
+     * Call an explicitly allowlisted method on a worker-local extension namespace.
+     *
+     * This is for extension APIs that are installed only inside the worker-owned
+     * PGlite instance. It does not execute SQL and does not bypass PGlite query or
+     * transaction mutexes; the worker validates namespace/method names against the
+     * `extensionRpcAllowlist` supplied at worker initialization.
+     */
+    callWorkerExtension<T = unknown>(namespace: string, method: string, args?: unknown[]): Promise<T>;
     get waitReady(): Promise<void>;
     get debug(): DebugLevel;
     /**
