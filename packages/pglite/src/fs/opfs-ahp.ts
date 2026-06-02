@@ -5,6 +5,10 @@ import { PGlite } from '../pglite.js'
 export interface OpfsAhpOptions {
   initialPoolSize?: number
   maintainedPoolSize?: number
+  /** Maximum concurrent OPFS sync-access-handle opens/creates per batch. */
+  maxConcurrentHandles?: number
+  /** Optional pause between handle batches to let Chromium's OPFS lock manager breathe. */
+  handleBatchDelayMs?: number
   debug?: boolean
 }
 
@@ -71,6 +75,8 @@ export class OpfsAhpFS extends BaseFilesystem {
   declare readonly dataDir: string
   readonly initialPoolSize: number
   readonly maintainedPoolSize: number
+  readonly maxConcurrentHandles: number
+  readonly handleBatchDelayMs: number
 
   #opfsRootAh!: FileSystemDirectoryHandle
   #rootAh!: FileSystemDirectoryHandle
@@ -108,12 +114,16 @@ export class OpfsAhpFS extends BaseFilesystem {
       // larger initial pool than the steady-state retained spare pool.
       initialPoolSize = 1800,
       maintainedPoolSize = 128,
+      maxConcurrentHandles = 100,
+      handleBatchDelayMs = 4,
       debug = false,
     }: OpfsAhpOptions = {},
   ) {
     super(dataDir, { debug })
     this.initialPoolSize = initialPoolSize
     this.maintainedPoolSize = maintainedPoolSize
+    this.maxConcurrentHandles = Math.max(1, Math.floor(maxConcurrentHandles))
+    this.handleBatchDelayMs = Math.max(0, Math.floor(handleBatchDelayMs))
   }
 
   async init(pg: PGlite, opts: Partial<PostgresMod>) {
@@ -169,10 +179,7 @@ export class OpfsAhpFS extends BaseFilesystem {
     // Reopen handles in bounded batches. Restoring every file with a single
     // Promise.all() can recreate the Chromium OPFS access-handle race that the
     // startup path avoids by limiting concurrent createSyncAccessHandle() calls.
-    const batchSize = 128
-    for (let i = 0; i < filenames.length; i += batchSize) {
-      await Promise.all(filenames.slice(i, i + batchSize).map(restoreBackingFile))
-    }
+    await this.#runInHandleBatches(filenames, restoreBackingFile)
     this.#idleHandlesReleased = false
   }
 
@@ -200,6 +207,67 @@ export class OpfsAhpFS extends BaseFilesystem {
     if (closedCount > 0) {
       console.info(`[OpfsAhpFS] releaseIdleHandles: closed ${closedCount} idle sync access handles`)
     }
+  }
+
+  async #delayBetweenHandleBatches(): Promise<void> {
+    if (this.handleBatchDelayMs <= 0) {
+      return
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, this.handleBatchDelayMs))
+  }
+
+  async #runInHandleBatches<T>(
+    items: readonly T[],
+    operation: (item: T) => Promise<void>,
+  ): Promise<void> {
+    for (let offset = 0; offset < items.length; offset += this.maxConcurrentHandles) {
+      const batch = items.slice(offset, offset + this.maxConcurrentHandles)
+      await Promise.all(batch.map(operation))
+      if (offset + this.maxConcurrentHandles < items.length) {
+        await this.#delayBetweenHandleBatches()
+      }
+    }
+  }
+
+  async #openBackingFile(filename: string): Promise<void> {
+    const fh = await this.#dataDirAh.getFileHandle(filename)
+    const sh: FileSystemSyncAccessHandle = await (
+      fh as any
+    ).createSyncAccessHandle()
+    this.#fh.set(filename, fh)
+    this.#sh.set(filename, sh)
+  }
+
+  async #createPoolFile(): Promise<void> {
+    ++this.poolCounter
+    const filename = `${(Date.now() - 1704063600).toString(16).padStart(8, '0')}-${this.poolCounter.toString(16).padStart(8, '0')}`
+    const fh = await this.#dataDirAh.getFileHandle(filename, {
+      create: true,
+    })
+    const sh: FileSystemSyncAccessHandle = await (
+      fh as any
+    ).createSyncAccessHandle()
+    this.#fh.set(filename, fh)
+    this.#sh.set(filename, sh)
+    this.#logWAL({
+      opp: 'createPoolFile',
+      args: [filename],
+    })
+    this.state.pool.push(filename)
+  }
+
+  async #deletePoolFile(): Promise<void> {
+    const filename = this.state.pool.pop()!
+    this.#logWAL({
+      opp: 'deletePoolFile',
+      args: [filename],
+    })
+    const fh = this.#fh.get(filename)!
+    const sh = this.#sh.get(filename)
+    sh?.close()
+    await this.#dataDirAh.removeEntry(fh.name)
+    this.#fh.delete(filename)
+    this.#sh.delete(filename)
   }
 
   async closeFs(): Promise<void> {
@@ -367,28 +435,27 @@ export class OpfsAhpFS extends BaseFilesystem {
       }
     }
 
-    // Open all file handles for dir tree
-    const walkPromises: Promise<void>[] = []
-    const walk = async (node: Node) => {
+    // Open all file handles for dir tree using bounded batches. Chrome's OPFS
+    // lock manager can stall when hundreds/thousands of sync handles are opened
+    // through a single unbounded Promise.all() burst.
+    const backingFilenames: string[] = []
+    const walk = (node: Node) => {
       if (node.type === 'file') {
-        try {
-          const fh = await this.#dataDirAh.getFileHandle(node.backingFilename)
-          const sh: FileSystemSyncAccessHandle = await (
-            fh as any
-          ).createSyncAccessHandle()
-          this.#fh.set(node.backingFilename, fh)
-
-          this.#sh.set(node.backingFilename, sh)
-        } catch (e) {
-          console.error('Error opening file handle for node', node, e)
-        }
+        backingFilenames.push(node.backingFilename)
       } else {
         for (const child of Object.values(node.children)) {
-          walkPromises.push(walk(child))
+          walk(child)
         }
       }
     }
-    await walk(this.state.root)
+    walk(this.state.root)
+    await this.#runInHandleBatches(backingFilenames, async (filename) => {
+      try {
+        await this.#openBackingFile(filename)
+      } catch (e) {
+        console.error('Error opening file handle for backing file', filename, e)
+      }
+    })
 
     // [NMT CUSTOMIZATION] Existing databases may have been created with a much
     // larger historical pool. Trim closed pool files before opening them so a
@@ -398,27 +465,13 @@ export class OpfsAhpFS extends BaseFilesystem {
       await this.#trimClosedPoolFiles(this.maintainedPoolSize)
     }
 
-    // Open remaining pool file handles
-    const poolPromises: Promise<void>[] = []
-    for (const filename of this.state.pool) {
-      poolPromises.push(
-        // eslint-disable-next-line no-async-promise-executor
-        new Promise<void>(async (resolve) => {
-          if (this.#fh.has(filename)) {
-            console.warn('File handle already exists for pool file', filename)
-          }
-          const fh = await this.#dataDirAh.getFileHandle(filename)
-          const sh: FileSystemSyncAccessHandle = await (
-            fh as any
-          ).createSyncAccessHandle()
-          this.#fh.set(filename, fh)
-          this.#sh.set(filename, sh)
-          resolve()
-        }),
-      )
-    }
-
-    await Promise.all([...walkPromises, ...poolPromises])
+    // Open remaining pool file handles with the same bounded batching.
+    await this.#runInHandleBatches(this.state.pool, async (filename) => {
+      if (this.#fh.has(filename)) {
+        console.warn('File handle already exists for pool file', filename)
+      }
+      await this.#openBackingFile(filename)
+    })
 
     await this.maintainPool(
       isNewState ? this.initialPoolSize : this.maintainedPoolSize,
@@ -428,50 +481,21 @@ export class OpfsAhpFS extends BaseFilesystem {
   async maintainPool(size?: number) {
     size = size || this.maintainedPoolSize
     const change = size - this.state.pool.length
-    const promises: Promise<void>[] = []
-    for (let i = 0; i < change; i++) {
-      promises.push(
-        // eslint-disable-next-line no-async-promise-executor
-        new Promise<void>(async (resolve) => {
-          ++this.poolCounter
-          const filename = `${(Date.now() - 1704063600).toString(16).padStart(8, '0')}-${this.poolCounter.toString(16).padStart(8, '0')}`
-          const fh = await this.#dataDirAh.getFileHandle(filename, {
-            create: true,
-          })
-          const sh: FileSystemSyncAccessHandle = await (
-            fh as any
-          ).createSyncAccessHandle()
-          this.#fh.set(filename, fh)
-          this.#sh.set(filename, sh)
-          this.#logWAL({
-            opp: 'createPoolFile',
-            args: [filename],
-          })
-          this.state.pool.push(filename)
-          resolve()
-        }),
+    if (change > 0) {
+      // Populate work items without opening handles yet; #runInHandleBatches
+      // owns the bounded concurrency and inter-batch yielding.
+      await this.#runInHandleBatches(
+        Array.from({ length: change }),
+        async () => { await this.#createPoolFile() },
+      )
+      return
+    }
+    if (change < 0) {
+      await this.#runInHandleBatches(
+        Array.from({ length: Math.abs(change) }),
+        async () => { await this.#deletePoolFile() },
       )
     }
-    for (let i = 0; i > change; i--) {
-      promises.push(
-        // eslint-disable-next-line no-async-promise-executor
-        new Promise<void>(async (resolve) => {
-          const filename = this.state.pool.pop()!
-          this.#logWAL({
-            opp: 'deletePoolFile',
-            args: [filename],
-          })
-          const fh = this.#fh.get(filename)!
-          const sh = this.#sh.get(filename)
-          sh?.close()
-          await this.#dataDirAh.removeEntry(fh.name)
-          this.#fh.delete(filename)
-          this.#sh.delete(filename)
-          resolve()
-        }),
-      )
-    }
-    await Promise.all(promises)
   }
 
   async #trimClosedPoolFiles(size: number) {

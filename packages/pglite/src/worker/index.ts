@@ -17,6 +17,14 @@ export type PGliteWorkerOptions<E extends Extensions = Extensions> =
   PGliteOptions<E> & {
     meta?: any
     id?: string
+    /**
+     * Explicit allowlist for worker-local extension namespace RPC.
+     *
+     * Shape: `{ namespaceName: ['methodName'] }`. Only listed methods are
+     * callable through `callWorkerExtension()`. This intentionally does not
+     * expose arbitrary worker object access.
+     */
+    extensionRpcAllowlist?: Record<string, readonly string[]>
   }
 
 export class PGliteWorker
@@ -346,6 +354,22 @@ export class PGliteWorker
     )
   }
 
+  /**
+   * Call an explicitly allowlisted method on a worker-local extension namespace.
+   *
+   * This is for extension APIs that are installed only inside the worker-owned
+   * PGlite instance. It does not execute SQL and does not bypass PGlite query or
+   * transaction mutexes; the worker validates namespace/method names against the
+   * `extensionRpcAllowlist` supplied at worker initialization.
+   */
+  async callWorkerExtension<T = unknown>(
+    namespace: string,
+    method: string,
+    args: unknown[] = [],
+  ): Promise<T> {
+    return await this.#rpc('_callExtensionMethod', namespace, method, args) as T
+  }
+
   get waitReady() {
     return new Promise<void>((resolve, reject) => {
       this.#initPromise
@@ -660,6 +684,7 @@ export async function worker({ init }: WorkerOptions) {
   const broadcastChannelId = `pglite-broadcast:${id}`
   const broadcastChannel = new BroadcastChannel(broadcastChannelId)
   const connectedTabs = new Set<string>()
+  const connectingTabs = new Set<string>()
   console.debug(`[PGliteInternal][worker-thread] ${stamp()} broadcast channel created: ${broadcastChannelId}`)
 
   // Await the main lock which is used to elect the leader
@@ -685,6 +710,11 @@ export async function worker({ init }: WorkerOptions) {
     const msg = event.data
     switch (msg.type) {
       case 'tab-here': {
+        if (connectedTabs.has(msg.id) || connectingTabs.has(msg.id)) {
+          suppressedTabHereCount++
+          break
+        }
+
         // A new tab has joined — rate-limit the log to once per second
         const now = Date.now()
         if (now - lastTabHereLogTime >= TAB_HERE_LOG_INTERVAL_MS) {
@@ -698,7 +728,15 @@ export async function worker({ init }: WorkerOptions) {
         } else {
           suppressedTabHereCount++
         }
-        connectTab(msg.id, await dbPromise, connectedTabs)
+        connectingTabs.add(msg.id)
+        dbPromise
+          .then((pg) => connectTab(msg.id, pg, connectedTabs, options.extensionRpcAllowlist ?? {}))
+          .catch((error) => {
+            console.error(`[PGliteInternal][worker-thread] failed to connect tab ${msg.id}:`, error)
+          })
+          .finally(() => {
+            connectingTabs.delete(msg.id)
+          })
         break
       }
     }
@@ -728,7 +766,12 @@ export async function worker({ init }: WorkerOptions) {
 // Track first RPC call for diagnostic purposes
 let firstRpcHandled = false
 
-async function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>) {
+async function connectTab(
+  tabId: string,
+  pg: PGlite,
+  connectedTabs: Set<string>,
+  extensionRpcAllowlist: Record<string, readonly string[]> = {},
+) {
   const _now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
 
   if (connectedTabs.has(tabId)) {
@@ -753,7 +796,7 @@ async function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>)
     })
   })
 
-  const api = makeWorkerApi(tabId, pg)
+  const api = makeWorkerApi(tabId, pg, extensionRpcAllowlist)
 
   tabChannel.addEventListener('message', async (event) => {
     const msg = event.data
@@ -887,7 +930,18 @@ async function connectTab(tabId: string, pg: PGlite, connectedTabs: Set<string>)
   }
 }
 
-function makeWorkerApi(tabId: string, db: PGlite) {
+function isSafeExtensionRpcName(value: string): boolean {
+  return value.length > 0
+    && value !== '__proto__'
+    && value !== 'prototype'
+    && value !== 'constructor'
+}
+
+function makeWorkerApi(
+  tabId: string,
+  db: PGlite,
+  extensionRpcAllowlist: Record<string, readonly string[]> = {},
+) {
   let queryLockRelease: (() => void) | null = null
   let transactionLockRelease: (() => void) | null = null
 
@@ -955,6 +1009,21 @@ function makeWorkerApi(tabId: string, db: PGlite) {
     },
     async _checkReady() {
       return await db._checkReady()
+    },
+    async _callExtensionMethod(namespace: string, method: string, args: unknown[] = []) {
+      if (!isSafeExtensionRpcName(namespace) || !isSafeExtensionRpcName(method)) {
+        throw new Error(`Extension RPC rejected unsafe namespace or method name`)
+      }
+      const allowedMethods = extensionRpcAllowlist[namespace]
+      if (!allowedMethods?.includes(method)) {
+        throw new Error(`Extension RPC method not allowed: ${namespace}.${method}`)
+      }
+      const namespaceObj = (db as any)[namespace]
+      const fn = namespaceObj?.[method]
+      if (typeof fn !== 'function') {
+        throw new Error(`Extension RPC method not found: ${namespace}.${method}`)
+      }
+      return await fn.apply(namespaceObj, Array.isArray(args) ? args : [])
     },
     async _acquireQueryLock() {
       return new Promise<void>((resolve) => {
