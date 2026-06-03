@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 <style scoped>
   table :is(td, th) {
     white-space: nowrap;

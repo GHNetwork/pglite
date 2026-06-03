@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # pglite-tools
 
 A selection of tools for working with [PGlite](https://github.com/electric-sql/pglite) databases, including pg_dump.

@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Getting started with PGlite
 
 PGlite can be used in both Node/Bun/Deno or the browser, and with any JavaScript framework.

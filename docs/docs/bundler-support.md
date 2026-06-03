@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Bundler Support
 
 Some bundlers require additional configuration to work with PGlite.

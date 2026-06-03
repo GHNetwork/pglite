@@ -31,6 +31,8 @@
 
 # PGlite - Postgres in WASM
 
+> **NMT Pathways Fork**: This is a forked/submoduled copy of PGlite for the NMT Pathways monorepo. Coordinate all storage-layer changes with `@nmtpathways/meridian` consumers. See [.ai-brief.md](.ai-brief.md) for agent context.
+
 ![PGlite](https://raw.githubusercontent.com/electric-sql/pglite/main/screenshot.png)
 
 PGlite is a WASM Postgres build packaged into a TypeScript client library that enables you to run Postgres in the browser, Node.js, Bun and Deno, with no need to install any other dependencies. It is only 3mb gzipped and has support for many Postgres extensions, including [pgvector](https://github.com/pgvector/pgvector).

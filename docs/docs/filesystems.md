@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Filesystems
 
 PGlite has a virtual file system layer that allows it to run in environments that don't traditionally have filesystem access.

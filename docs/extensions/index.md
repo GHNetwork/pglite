@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [extensions]
+---
+
 <script setup>
 import { computed, ref } from "vue";
 import { data } from "./extensions.data.ts";

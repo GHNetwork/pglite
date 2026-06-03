@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Videos
 
 Compiling Postgres to WASM with PGlite (Sam Willis at [pgconf.dev](https://pgconf.dev)).

@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Upgrading pglite from v0.2.x to v0.3.x
 
 PGlite versions 0.2.x were based on PostgreSQL version 16.x, while PGlite version 0.3.x is based on PostgreSQL version 17.4. This is a BREAKING CHANGE as PostgreSQL does not maintain data store compatibility between major versions.

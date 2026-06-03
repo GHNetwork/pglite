@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # ORM and Query Builder Support
 
 The following ORMs and Query Builders are known to work properly with

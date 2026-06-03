@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Live Queries
 
 The "live" extension enables you to subscribe to a query and receive updated results when the underlying tables change.

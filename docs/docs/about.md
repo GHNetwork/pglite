@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # What is PGlite
 
 PGlite is a [WASM](https://webassembly.org/) Postgres build packaged into a TypeScript/JavaScript client library, that enables you to run Postgres in the browser, [Node.js](https://nodejs.org/) and [Bun](https://bun.sh/), with no need to install any other dependencies. It's under 3mb Gzipped, and has support for many [Postgres extensions](../extensions/), including [pgvector](../extensions/#pgvector).

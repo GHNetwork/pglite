@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Multi-tab Worker
 
 It's likely that you will want to run PGlite in a Web Worker so that it doesn't block the main thread. Additionally, as PGlite is single connection only, you may want to proxy multiple browser tabs to a single PGlite instance.

@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [documentation]
+---
+
 # Debugging PGlite
 
 Building a `debug` version of PGlite allows you to debug both the TypeScript and WASM parts of the project.

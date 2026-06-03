@@ -1,3 +1,11 @@
+---
+doc-type: reference
+status: canonical
+scope: pglite
+date: 2026-04-03
+tags: [extensions]
+---
+
 # Extension Development
 
 PGlite has support for both Postgres extensions, and has its own plugin API that allows a developer to augment a PGlite instance with an additional API.
