@@ -33,8 +33,14 @@
       }
     }
   },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "bin": {
-    "pglite-server": "./dist/scripts/server.js"
+    "pglite-server": "./bin/pglite-server.js"
   },
   "scripts": {
     "build": "echo \"[NMT] Build skipped - using pre-built dist/\"",
