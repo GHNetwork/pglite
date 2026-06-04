@@ -32,6 +32,17 @@ class FakeWorker extends EventTarget {
   }
 }
 
+class ImmediateLeaderWorker extends FakeWorker {
+  override postMessage(message: any) {
+    if (message.type === 'init') {
+      queueMicrotask(() => {
+        this.dispatchEvent(createMessageEvent({ type: 'ready', id: 'test-worker' }))
+        this.dispatchEvent(createMessageEvent({ type: 'leader-now' }))
+      })
+    }
+  }
+}
+
 class FakeBroadcastChannel extends EventTarget {
   static registry = new Map<string, FakeBroadcastChannel[]>()
 
@@ -158,6 +169,16 @@ describe('PGliteWorker fatal connection handling', () => {
 
     expect(countTabHere()).toBe(retryCountAfterFailure)
     await expect(db.waitReady).rejects.toThrow('Program terminated with exit(2)')
+
+    await db.close()
+  })
+
+  it('captures leader-now when it arrives immediately after ready', async () => {
+    const db = new PGliteWorker(new ImmediateLeaderWorker() as unknown as Worker)
+
+    await vi.waitFor(() => {
+      expect(db.isLeader).toBe(true)
+    })
 
     await db.close()
   })

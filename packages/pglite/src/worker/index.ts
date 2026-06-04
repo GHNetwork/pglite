@@ -91,7 +91,24 @@ export class PGliteWorker
       this.#workerProcess.addEventListener('message', callback)
     })
 
+    // Install this before #init() posts the init message. The worker can acquire
+    // the election lock and post `leader-now` immediately after `ready`; if the
+    // main thread only starts listening after awaiting `ready`, the leader signal
+    // can be permanently missed and `isLeader` remains false in a single-tab app.
+    this.#workerProcess.addEventListener('message', (event: MessageEvent<any>) => {
+      if (event.data?.type === 'leader-now') {
+        this.#markAsLeader()
+      }
+    })
+
     this.#initPromise = this.#init(options)
+  }
+
+  #markAsLeader() {
+    if (this.#isLeader) return
+    console.info(`[PGliteInternal][worker-main] received 'leader-now' - this tab is the leader`)
+    this.#isLeader = true
+    this.#eventTarget.dispatchEvent(new Event('leader-change'))
   }
 
   /**
@@ -251,14 +268,6 @@ export class PGliteWorker
           message: event.data.error?.message || 'Database connection failed',
           error: new Error(event.data.error?.message || 'Database connection failed')
         }))
-      }
-    })
-
-    this.#workerProcess.addEventListener('message', async (event) => {
-      if (event.data.type === 'leader-now') {
-        console.info(`[PGliteInternal][worker-main] ${stamp()} received 'leader-now' - this tab is the leader`)
-        this.#isLeader = true
-        this.#eventTarget.dispatchEvent(new Event('leader-change'))
       }
     })
 
