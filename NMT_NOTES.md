@@ -21,6 +21,19 @@ This fork exists to:
 
 All NMT customizations are marked with `[NMT CUSTOMIZATION]` comments in the code.
 
+### 2026-06-09 - Corrected Chrome Handle-Limit Assumptions
+
+**Summary:**
+
+- Updated Meridian and PGlite fork comments/documentation to reflect the current
+  understanding from `docs/session-data/report.md`.
+- There is **no verified Chrome pool handle allocation limit**.
+- Earlier Chrome-specific threshold language was based on incomplete evidence and
+  should no longer be used to explain `fs.init` timeouts.
+- Bounded OPFS-AHP batches remain in place as conservative burst-control and
+  observability measures while the underlying init-settlement failure is still
+  being investigated.
+
 ---
 
 ### 2025-12-10 - Diagnostic Instrumentation and Crash Recovery (Updated)

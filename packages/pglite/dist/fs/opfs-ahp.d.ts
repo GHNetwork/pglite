@@ -3,9 +3,9 @@ import { v as BaseFilesystem, b as PGlite, c as PostgresMod, w as FsStats } from
 interface OpfsAhpOptions {
     initialPoolSize?: number;
     maintainedPoolSize?: number;
-    /** Maximum concurrent OPFS sync-access-handle opens/creates per batch. */
+    /** Maximum OPFS sync-access-handle opens/creates per progress/yield batch. */
     maxConcurrentHandles?: number;
-    /** Optional pause between handle batches to let Chromium's OPFS lock manager breathe. */
+    /** Optional pause between handle batches to reduce OPFS burst pressure. */
     handleBatchDelayMs?: number;
     debug?: boolean;
 }

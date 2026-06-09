@@ -215,24 +215,26 @@ export class PGlite
     // =============================================================================
     // [NMT CUSTOMIZATION] Stage guard helper for timeout enforcement and heartbeats
     // =============================================================================
-    // RATIONALE: PGlite's #init pipeline can hang silently on certain browsers
-    // (especially Chrome with OPFS-AHP). Without per-stage guards, the outer
+    // RATIONALE: PGlite's #init pipeline can hang silently in certain OPFS-AHP
+    // environments. Without per-stage guards, the outer
     // waitReady timeout gives no indication of WHICH stage stalled.
     //
     // This helper:
     // 1. Logs start/finish with [PGliteInternal][init][stageName] prefix
     // 2. Emits periodic heartbeats during long-running stages
-    // 3. Enforces per-stage timeout that rejects with clear error instead of hanging
+    // 3. Enforces a heartbeat-aware per-stage budget aligned with Meridian's
+    //    worker timeout hierarchy. This must not undercut slow-but-active
+    //    OPFS-AHP initialization with a pre-heartbeat 30s deadman switch.
     //
     // See: docs/pglite-custom/pglite-fork-decision-2025-12.md (Fix 6.2)
     // =============================================================================
     const HEARTBEAT_INTERVAL_MS = 3000 // Emit heartbeat every 3 seconds
-    const DEFAULT_STAGE_TIMEOUT_MS = 60000 // 60 second default per-stage timeout
+    const INIT_STAGE_TIMEOUT_MS = 90000 // Align with Meridian worker-side initialization budget
 
     const withInitStageGuard = async <T>(
       stageName: string,
       fn: () => Promise<T>,
-      timeoutMs: number = DEFAULT_STAGE_TIMEOUT_MS,
+      timeoutMs: number = INIT_STAGE_TIMEOUT_MS,
     ): Promise<T> => {
       const stageStart = _now()
       // [NMT CUSTOMIZATION] Use console.info instead of console.debug so logs survive
@@ -247,11 +249,13 @@ export class PGlite
         console.info(`[PGliteInternal][init][${stageName}] ${stamp()} HEARTBEAT #${heartbeatCount} (stage running for ${elapsed}ms)`)
       }, HEARTBEAT_INTERVAL_MS)
 
+      let timeoutId: ReturnType<typeof setTimeout> | undefined
+
       try {
         const result = await Promise.race([
           fn(),
           new Promise<never>((_, reject) => {
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
               const elapsed = (_now() - stageStart).toFixed(1)
               reject(new Error(
                 `[PGliteInternal][init][${stageName}] TIMEOUT after ${elapsed}ms (limit: ${timeoutMs}ms). ` +
@@ -271,6 +275,9 @@ export class PGlite
         throw error
       } finally {
         clearInterval(heartbeatInterval)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
       }
     }
 
@@ -288,7 +295,7 @@ export class PGlite
       console.debug(`[PGliteInternal][init] ${stamp()} parseDataDir result: dataDir=${dataDir}, fsType=${fsType}`)
       this.fs = await withInitStageGuard('loadFs', async () => {
         return await loadFs(dataDir, fsType)
-      }, 30000) // 30s timeout for filesystem loading
+      }, INIT_STAGE_TIMEOUT_MS) // OPFS-AHP filesystem loading can be slow but heartbeat-visible
     }
 
     const extensionBundlePromises: Record<string, Promise<Blob | null>> = {}
@@ -428,7 +435,7 @@ export class PGlite
       async () => {
         return await this.fs!.init(this, emscriptenOpts)
       },
-      30000, // 30s timeout for filesystem initialization
+      INIT_STAGE_TIMEOUT_MS, // OPFS-AHP filesystem initialization can exceed the old 30s cutoff
     )
     emscriptenOpts = amendedEmscriptenOpts
 
@@ -479,18 +486,18 @@ export class PGlite
       async () => {
         await fsBundleBufferPromise
       },
-      30000, // 30s timeout for fs bundle loading
+      INIT_STAGE_TIMEOUT_MS, // Keep bundle wait aligned with the worker initialization budget
     )
 
     // [NMT CUSTOMIZATION] Wrap PostgresModFactory with stage guard - this is the most critical
-    // stage where Chrome hangs have been observed. Use longer timeout (90s) as Emscripten
+    // stage where OPFS-AHP startup hangs have been observed. Use longer timeout (90s) as Emscripten
     // module instantiation can be legitimately slow on first load.
     this.mod = await withInitStageGuard(
       'PostgresModFactory',
       async () => {
         return await PostgresModFactory(emscriptenOpts)
       },
-      90000, // 90s timeout - Emscripten module factory can be slow
+      INIT_STAGE_TIMEOUT_MS, // Emscripten module factory can be slow on first load
     )
 
     // set the write callback
@@ -562,7 +569,7 @@ export class PGlite
       async () => {
         await this.fs!.initialSyncFs()
       },
-      60000, // 60s timeout for initial filesystem sync
+      INIT_STAGE_TIMEOUT_MS, // Initial filesystem sync should not undercut worker liveness budget
     )
 
     // If the user has provided a tarball to load the database from, do that now.
@@ -596,7 +603,7 @@ export class PGlite
       async () => {
         await loadExtensions(this.mod!, (...args) => this.#log(...args))
       },
-      30000, // 30s timeout for extension loading
+      INIT_STAGE_TIMEOUT_MS, // Extension loading can be slow on constrained devices
     )
 
     // Initialize the database
@@ -774,7 +781,7 @@ export class PGlite
       async () => {
         await this.syncToFs()
       },
-      60000, // 60s timeout for final filesystem sync
+      INIT_STAGE_TIMEOUT_MS, // Final filesystem sync should match the initialization budget
     )
 
     this.#ready = true
@@ -791,7 +798,7 @@ export class PGlite
       async () => {
         await this._initArrayTypes()
       },
-      30000, // 30s timeout for array type initialization
+      INIT_STAGE_TIMEOUT_MS, // Keep post-ready metadata initialization within the same budget
     )
 
     // [NMT CUSTOMIZATION] Wrap extension init functions with stage guard
@@ -803,7 +810,7 @@ export class PGlite
             await initFn()
           }
         },
-        60000, // 60s timeout for all extension init functions
+        INIT_STAGE_TIMEOUT_MS, // Keep extension init functions aligned with startup budget
       )
     }
 

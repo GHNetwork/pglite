@@ -5,12 +5,14 @@ import { PGlite } from '../pglite.js'
 export interface OpfsAhpOptions {
   initialPoolSize?: number
   maintainedPoolSize?: number
-  /** Maximum concurrent OPFS sync-access-handle opens/creates per batch. */
+  /** Maximum OPFS sync-access-handle opens/creates per progress/yield batch. */
   maxConcurrentHandles?: number
-  /** Optional pause between handle batches to let Chromium's OPFS lock manager breathe. */
+  /** Optional pause between handle batches to reduce OPFS burst pressure. */
   handleBatchDelayMs?: number
   debug?: boolean
 }
+
+const HANDLE_OPERATION_STALL_REPORT_MS = 5000
 
 // TypeScript doesn't have a built-in type for FileSystemSyncAccessHandle
 export interface FileSystemSyncAccessHandle {
@@ -177,9 +179,10 @@ export class OpfsAhpFS extends BaseFilesystem {
     }
 
     // Reopen handles in bounded batches. Restoring every file with a single
-    // Promise.all() can recreate the Chromium OPFS access-handle race that the
-    // startup path avoids by limiting concurrent createSyncAccessHandle() calls.
-    await this.#runInHandleBatches(filenames, restoreBackingFile)
+    // Promise.all() creates a large burst of sync-access-handle activity that is
+    // harder to observe and recover from. This batching is conservative burst
+    // control, not a claim of any verified Chrome handle limit.
+    await this.#runInHandleBatches(filenames, restoreBackingFile, 'restoring idle handles')
     this.#idleHandlesReleased = false
   }
 
@@ -219,10 +222,48 @@ export class OpfsAhpFS extends BaseFilesystem {
   async #runInHandleBatches<T>(
     items: readonly T[],
     operation: (item: T) => Promise<void>,
+    label = 'handle batch operation',
   ): Promise<void> {
+    const total = items.length
+    if (total > 0) {
+      console.info(
+        `[OpfsAhpFS] ${label}: starting ${total} handle operation(s) ` +
+        `(batch=${this.maxConcurrentHandles}, delay=${this.handleBatchDelayMs}ms)`
+      )
+    }
+
     for (let offset = 0; offset < items.length; offset += this.maxConcurrentHandles) {
       const batch = items.slice(offset, offset + this.maxConcurrentHandles)
-      await Promise.all(batch.map(operation))
+      const batchNumber = Math.floor(offset / this.maxConcurrentHandles) + 1
+      const batchCount = Math.ceil(total / this.maxConcurrentHandles)
+      const batchStart = Date.now()
+      console.info(
+        `[OpfsAhpFS] ${label}: starting batch ${batchNumber}/${batchCount} ` +
+        `(items ${offset + 1}-${Math.min(offset + batch.length, total)} of ${total})`
+      )
+      for (const [index, item] of batch.entries()) {
+        const itemNumber = offset + index + 1
+        let completed = false
+        const stallTimer = setTimeout(() => {
+          if (!completed) {
+            console.warn(
+              `[OpfsAhpFS] ${label}: item ${itemNumber}/${total} still pending after ` +
+              `${HANDLE_OPERATION_STALL_REPORT_MS}ms (batch ${batchNumber}/${batchCount})`
+            )
+          }
+        }, HANDLE_OPERATION_STALL_REPORT_MS)
+
+        try {
+          await operation(item)
+        } finally {
+          completed = true
+          clearTimeout(stallTimer)
+        }
+      }
+      console.info(
+        `[OpfsAhpFS] ${label}: completed ${Math.min(offset + batch.length, total)}/${total} ` +
+        `(batch ${batchNumber}, ${Date.now() - batchStart}ms)`
+      )
       if (offset + this.maxConcurrentHandles < items.length) {
         await this.#delayBetweenHandleBatches()
       }
@@ -417,6 +458,10 @@ export class OpfsAhpFS extends BaseFilesystem {
       isNewState = true
     }
     this.state = state
+    console.info(
+      `[OpfsAhpFS] #init: state loaded ` +
+      `(isNewState=${isNewState}, pool=${this.state.pool.length}, walEntries=${Math.max(0, stateLines.length - 1)})`
+    )
 
     // Apply WAL entries
     const wal = stateLines
@@ -434,10 +479,11 @@ export class OpfsAhpFS extends BaseFilesystem {
         }
       }
     }
+    console.info(`[OpfsAhpFS] #init: WAL replay complete (${wal.length} entr${wal.length === 1 ? 'y' : 'ies'})`)
 
-    // Open all file handles for dir tree using bounded batches. Chrome's OPFS
-    // lock manager can stall when hundreds/thousands of sync handles are opened
-    // through a single unbounded Promise.all() burst.
+    // Open all file handles for dir tree using bounded batches. A single unbounded
+    // Promise.all() burst can create a large OPFS-AHP fan-out that is harder to
+    // observe and reason about during fs.init settlement across browsers.
     const backingFilenames: string[] = []
     const walk = (node: Node) => {
       if (node.type === 'file') {
@@ -449,32 +495,47 @@ export class OpfsAhpFS extends BaseFilesystem {
       }
     }
     walk(this.state.root)
-    await this.#runInHandleBatches(backingFilenames, async (filename) => {
-      try {
-        await this.#openBackingFile(filename)
-      } catch (e) {
-        console.error('Error opening file handle for backing file', filename, e)
-      }
-    })
+    console.info(`[OpfsAhpFS] #init: discovered ${backingFilenames.length} existing backing file handle(s) to open`)
+    await this.#runInHandleBatches(
+      backingFilenames,
+      async (filename) => {
+        try {
+          await this.#openBackingFile(filename)
+        } catch (e) {
+          console.error('Error opening file handle for backing file', filename, e)
+        }
+      },
+      'opening existing backing files',
+    )
 
     // [NMT CUSTOMIZATION] Existing databases may have been created with a much
     // larger historical pool. Trim closed pool files before opening them so a
     // warm start does not transiently acquire hundreds/thousands of stale sync
     // access handles only to close them immediately afterwards.
     if (!isNewState) {
+      console.info(`[OpfsAhpFS] #init: trimming closed pool files to maintained size ${this.maintainedPoolSize}`)
       await this.#trimClosedPoolFiles(this.maintainedPoolSize)
     }
 
     // Open remaining pool file handles with the same bounded batching.
-    await this.#runInHandleBatches(this.state.pool, async (filename) => {
-      if (this.#fh.has(filename)) {
-        console.warn('File handle already exists for pool file', filename)
-      }
-      await this.#openBackingFile(filename)
-    })
+    console.info(`[OpfsAhpFS] #init: opening ${this.state.pool.length} retained pool handle(s)`)
+    await this.#runInHandleBatches(
+      this.state.pool,
+      async (filename) => {
+        if (this.#fh.has(filename)) {
+          console.warn('File handle already exists for pool file', filename)
+        }
+        await this.#openBackingFile(filename)
+      },
+      'opening retained pool files',
+    )
 
-    await this.maintainPool(
-      isNewState ? this.initialPoolSize : this.maintainedPoolSize,
+    const targetPoolSize = isNewState ? this.initialPoolSize : this.maintainedPoolSize
+    console.info(`[OpfsAhpFS] #init: maintaining pool to target size ${targetPoolSize}`)
+    await this.maintainPool(targetPoolSize)
+    console.info(
+      `[OpfsAhpFS] #init: COMPLETE ` +
+      `(pool=${this.state.pool.length}, openHandles=${this.#sh.size}, unsynced=${this.#unsyncedSH.size})`
     )
   }
 
@@ -482,18 +543,28 @@ export class OpfsAhpFS extends BaseFilesystem {
     size = size || this.maintainedPoolSize
     const change = size - this.state.pool.length
     if (change > 0) {
+      console.info(
+        `[OpfsAhpFS] maintainPool: growing pool by ${change} ` +
+        `(current=${this.state.pool.length}, target=${size})`
+      )
       // Populate work items without opening handles yet; #runInHandleBatches
       // owns the bounded concurrency and inter-batch yielding.
       await this.#runInHandleBatches(
         Array.from({ length: change }),
         async () => { await this.#createPoolFile() },
+        'creating retained pool files',
       )
       return
     }
     if (change < 0) {
+      console.info(
+        `[OpfsAhpFS] maintainPool: shrinking pool by ${Math.abs(change)} ` +
+        `(current=${this.state.pool.length}, target=${size})`
+      )
       await this.#runInHandleBatches(
         Array.from({ length: Math.abs(change) }),
         async () => { await this.#deletePoolFile() },
+        'deleting retained pool files',
       )
     }
   }
