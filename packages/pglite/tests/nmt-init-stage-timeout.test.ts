@@ -41,4 +41,21 @@ describe('NMT init-stage timeout budget', () => {
     expect(source).toContain('HANDLE_OPERATION_STALL_REPORT_MS')
     expect(source).toContain('still pending after')
   })
+
+  it('creates backing files on-demand during direct materialization instead of pre-growing a pool', () => {
+    const source = opfsAhpSource()
+
+    // The old burst-prone pattern pre-created the entire pool before writing.
+    expect(source).not.toContain('await this.maintainPool(requiredPoolSize)')
+    expect(source).not.toContain('const requiredPoolSize = regularFiles.length')
+    expect(source).not.toContain('const requiredPoolSize = this.state.pool.length + regularFiles.length')
+
+    // On-demand creation avoids the 1,500+ handle creation burst.
+    expect(source).toContain('#createMaterializedBackingFile')
+    expect(source).toContain('#materializeRegularFileOnDemand')
+    expect(source).toContain('await this.#createMaterializedBackingFile()')
+    expect(source).not.toContain('await this.#runInHandleBatches(regularFiles')
+    expect(source).toContain('one file at a time')
+    expect(source).toContain('direct materialization file')
+  })
 })

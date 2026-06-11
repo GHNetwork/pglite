@@ -225,6 +225,53 @@ describe('PGliteWorker fatal connection handling', () => {
     expect(fakeDb.query).toHaveBeenCalledOnce()
   })
 
+  it('notifies each tab once when database initialization fails', async () => {
+    const workerGlobal = new EventTarget()
+    vi.stubGlobal('addEventListener', workerGlobal.addEventListener.bind(workerGlobal))
+    vi.stubGlobal('postMessage', vi.fn())
+
+    const initError = new Error('OPFS-AHP scratch create blocked while resetting fresh target state')
+    const init = vi.fn(async () => {
+      throw initError
+    })
+
+    const workerPromise = worker({ init })
+    const workerRejection = expect(workerPromise).rejects.toThrow(initError.message)
+    workerGlobal.dispatchEvent(createMessageEvent({
+      type: 'init',
+      options: { id: 'failed-init-worker' },
+    }))
+
+    await vi.waitFor(() => {
+      expect(FakeBroadcastChannel.first('pglite-broadcast:failed-init-worker')).toBeDefined()
+    })
+
+    const broadcastChannel = FakeBroadcastChannel.first('pglite-broadcast:failed-init-worker')!
+    broadcastChannel.emitMessage({ type: 'tab-here', id: 'failed-tab' })
+
+    await vi.waitFor(() => {
+      const tabChannels = FakeBroadcastChannel.matching('pglite-tab:failed-tab')
+      expect(tabChannels).toHaveLength(1)
+      expect(tabChannels[0].sentMessages).toContainEqual({
+        type: 'connection-error',
+        error: expect.objectContaining({
+          code: 'DB_INIT_FAILED',
+          message: initError.message,
+        }),
+      })
+    })
+
+    for (let i = 0; i < 8; i++) {
+      broadcastChannel.emitMessage({ type: 'tab-here', id: 'failed-tab' })
+    }
+
+    expect(FakeBroadcastChannel.matching('pglite-tab:failed-tab')).toHaveLength(1)
+    expect(vi.mocked(console.error).mock.calls.filter(
+      ([message]) => String(message).includes('failed to connect tab failed-tab'),
+    )).toHaveLength(1)
+    await workerRejection
+  })
+
   it('forwards only allowlisted worker-local extension namespace methods', async () => {
     const workerGlobal = new EventTarget()
     vi.stubGlobal('addEventListener', workerGlobal.addEventListener.bind(workerGlobal))

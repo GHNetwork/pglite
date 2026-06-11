@@ -36,6 +36,11 @@ export async function loadTar(
   file: File | Blob,
   pgDataDir: string,
 ): Promise<void> {
+  const files = await readTarFiles(file)
+  loadTarFiles(FS, files, pgDataDir)
+}
+
+export async function readTarFiles(file: File | Blob): Promise<TarFile[]> {
   let tarball = new Uint8Array(await file.arrayBuffer())
   const filename =
     typeof File !== 'undefined' && file instanceof File ? file.name : undefined
@@ -47,7 +52,7 @@ export async function loadTar(
     tarball = await unzip(tarball) as Uint8Array<ArrayBuffer>
   }
 
-  let files
+  let files: TarFile[]
   try {
     files = untar(tarball)
   } catch (e) {
@@ -60,6 +65,14 @@ export async function loadTar(
     }
   }
 
+  return files
+}
+
+export function loadTarFiles(
+  FS: FS,
+  files: TarFile[],
+  pgDataDir: string,
+): void {
   // [NMT CUSTOMIZATION] Track pg_control extraction for debugging
   let pgControlExtracted = false
   let pgControlDataSize = 0

@@ -694,6 +694,7 @@ export async function worker({ init }: WorkerOptions) {
   const broadcastChannel = new BroadcastChannel(broadcastChannelId)
   const connectedTabs = new Set<string>()
   const connectingTabs = new Set<string>()
+  const failedConnectionTabs = new Set<string>()
   console.debug(`[PGliteInternal][worker-thread] ${stamp()} broadcast channel created: ${broadcastChannelId}`)
 
   // Await the main lock which is used to elect the leader
@@ -708,6 +709,10 @@ export async function worker({ init }: WorkerOptions) {
   console.debug(`[PGliteInternal][worker-thread] ${stamp()} calling init(options) to create PGlite instance...`)
   const dbInitStart = _now()
   const dbPromise = init(options)
+  let dbInitFailure: unknown
+  void dbPromise.catch((error) => {
+    dbInitFailure = error
+  })
 
   // Start listening for messages from tabs
   // Rate-limit 'tab-here' logging to avoid console spam (tabs send this every 16ms until connected)
@@ -719,7 +724,7 @@ export async function worker({ init }: WorkerOptions) {
     const msg = event.data
     switch (msg.type) {
       case 'tab-here': {
-        if (connectedTabs.has(msg.id) || connectingTabs.has(msg.id)) {
+        if (connectedTabs.has(msg.id) || connectingTabs.has(msg.id) || failedConnectionTabs.has(msg.id)) {
           suppressedTabHereCount++
           break
         }
@@ -737,11 +742,24 @@ export async function worker({ init }: WorkerOptions) {
         } else {
           suppressedTabHereCount++
         }
+        if (dbInitFailure) {
+          failedConnectionTabs.add(msg.id)
+          console.error(`[PGliteInternal][worker-thread] failed to connect tab ${msg.id}:`, dbInitFailure)
+          notifyTabConnectionError(msg.id, dbInitFailure, 'DB_INIT_FAILED')
+          break
+        }
+
         connectingTabs.add(msg.id)
         dbPromise
           .then((pg) => connectTab(msg.id, pg, connectedTabs, options.extensionRpcAllowlist ?? {}))
           .catch((error) => {
+            dbInitFailure = error
+            if (failedConnectionTabs.has(msg.id)) {
+              return
+            }
+            failedConnectionTabs.add(msg.id)
             console.error(`[PGliteInternal][worker-thread] failed to connect tab ${msg.id}:`, error)
+            notifyTabConnectionError(msg.id, error, 'DB_INIT_FAILED')
           })
           .finally(() => {
             connectingTabs.delete(msg.id)
@@ -937,6 +955,28 @@ async function connectTab(
     // Clean up the tab channel
     tabChannel.close()
   }
+}
+
+function serializeConnectionError(error: unknown, fallbackCode: string) {
+  const err = error as Error & { code?: string }
+  return {
+    message: err?.message || String(error),
+    name: err?.name || 'Error',
+    code: err?.code || fallbackCode,
+  }
+}
+
+function notifyTabConnectionError(
+  tabId: string,
+  error: unknown,
+  fallbackCode: string,
+): void {
+  const tabChannel = new BroadcastChannel(`pglite-tab:${tabId}`)
+  tabChannel.postMessage({
+    type: 'connection-error',
+    error: serializeConnectionError(error, fallbackCode),
+  })
+  tabChannel.close()
 }
 
 function isSafeExtensionRpcName(value: string): boolean {

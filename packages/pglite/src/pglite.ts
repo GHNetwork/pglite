@@ -37,6 +37,15 @@ import {
   NotificationResponseMessage,
 } from '@electric-sql/pg-protocol/messages'
 
+type DirectDataDirFilesystem = Filesystem & {
+  loadDataDirFromTar(file: File | Blob, pgDataDir: string): Promise<void>
+}
+
+function supportsDirectDataDirLoad(fs: Filesystem): fs is DirectDataDirFilesystem {
+  const candidate = fs as Filesystem & { loadDataDirFromTar?: unknown }
+  return typeof candidate.loadDataDirFromTar === 'function'
+}
+
 export class PGlite
   extends BasePGlite
   implements PGliteInterface, AsyncDisposable
@@ -583,8 +592,15 @@ export class PGlite
       this.#log('pglite: loading data from tarball')
       console.debug(`[PGliteInternal][init] ${stamp()} loading data from tarball...`)
       const loadTarStart = _now()
-      await loadTar(this.mod.FS, options.loadDataDir, PGDATA)
-      console.debug(`[PGliteInternal][init] ${stamp()} loadTar() completed (took ${(_now() - loadTarStart).toFixed(1)}ms)`)
+      const dataDirFs = this.fs!
+      if (supportsDirectDataDirLoad(dataDirFs)) {
+        console.info(`[PGliteInternal][init] ${stamp()} using direct OPFS-AHP data-dir materialization`)
+        await dataDirFs.loadDataDirFromTar(options.loadDataDir, PGDATA)
+        console.debug(`[PGliteInternal][init] ${stamp()} direct data-dir materialization completed (took ${(_now() - loadTarStart).toFixed(1)}ms)`)
+      } else {
+        await loadTar(this.mod.FS, options.loadDataDir, PGDATA)
+        console.debug(`[PGliteInternal][init] ${stamp()} loadTar() completed (took ${(_now() - loadTarStart).toFixed(1)}ms)`)
+      }
     }
 
     // Check and log if the database exists

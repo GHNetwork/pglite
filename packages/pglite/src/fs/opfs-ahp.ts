@@ -1,18 +1,28 @@
 import { BaseFilesystem, ERRNO_CODES, type FsStats } from './base.js'
 import type { PostgresMod } from '../postgresMod.js'
-import { PGlite } from '../pglite.js'
+import type { PGlite } from '../pglite.js'
+import { readTarFiles } from './tarUtils.js'
+import { DIRTYPE, REGTYPE, type TarFile } from 'tinytar'
 
 export interface OpfsAhpOptions {
+  /** Pool entries created during initial OPFS-AHP filesystem initialization. */
   initialPoolSize?: number
+  /** Runtime spare pool target maintained after filesystem sync/query boundaries. */
   maintainedPoolSize?: number
-  /** Maximum OPFS sync-access-handle opens/creates per progress/yield batch. */
+  /**
+   * Whether #init may grow the runtime spare pool for an existing state.
+   * The initial preallocation pool remains controlled solely by initialPoolSize.
+   */
+  maintainRuntimePoolOnInit?: boolean
+  /** Number of maintenance OPFS operations to run before yielding/progress logging. */
   maxConcurrentHandles?: number
-  /** Optional pause between handle batches to reduce OPFS burst pressure. */
+  /** Optional pause between handle batches. Defaults to no artificial delay. */
   handleBatchDelayMs?: number
   debug?: boolean
 }
 
 const HANDLE_OPERATION_STALL_REPORT_MS = 5000
+const DEFAULT_HANDLE_BATCH_SIZE = 100
 
 // TypeScript doesn't have a built-in type for FileSystemSyncAccessHandle
 export interface FileSystemSyncAccessHandle {
@@ -77,6 +87,7 @@ export class OpfsAhpFS extends BaseFilesystem {
   declare readonly dataDir: string
   readonly initialPoolSize: number
   readonly maintainedPoolSize: number
+  readonly maintainRuntimePoolOnInit: boolean
   readonly maxConcurrentHandles: number
   readonly handleBatchDelayMs: number
 
@@ -110,20 +121,21 @@ export class OpfsAhpFS extends BaseFilesystem {
   constructor(
     dataDir: string,
     {
-      // [NMT CUSTOMIZATION] Keep URL-based OPFS-AHP starts inside Meridian's
-      // production resource envelope. The current Pathways prebuilt database
-      // contains 1529 regular files, so cold loadDataDir hydration needs a
-      // larger initial pool than the steady-state retained spare pool.
-      initialPoolSize = 1800,
-      maintainedPoolSize = 128,
-      maxConcurrentHandles = 100,
-      handleBatchDelayMs = 4,
+      // [NMT CUSTOMIZATION] Keep upstream pool defaults for generic OPFS-AHP
+      // use. Pathways overrides these to bypass init preallocation while direct
+      // materialization is validated.
+      initialPoolSize = 1000,
+      maintainedPoolSize = 100,
+      maintainRuntimePoolOnInit = true,
+      maxConcurrentHandles = DEFAULT_HANDLE_BATCH_SIZE,
+      handleBatchDelayMs = 0,
       debug = false,
     }: OpfsAhpOptions = {},
   ) {
     super(dataDir, { debug })
     this.initialPoolSize = initialPoolSize
     this.maintainedPoolSize = maintainedPoolSize
+    this.maintainRuntimePoolOnInit = maintainRuntimePoolOnInit
     this.maxConcurrentHandles = Math.max(1, Math.floor(maxConcurrentHandles))
     this.handleBatchDelayMs = Math.max(0, Math.floor(handleBatchDelayMs))
   }
@@ -156,9 +168,7 @@ export class OpfsAhpFS extends BaseFilesystem {
         return
       }
       const fh = this.#fh.get(filename) ?? await this.#dataDirAh.getFileHandle(filename)
-      const sh: FileSystemSyncAccessHandle = await (
-        fh as any
-      ).createSyncAccessHandle()
+      const sh = await this.#createSyncAccessHandle(fh)
       this.#fh.set(filename, fh)
       this.#sh.set(filename, sh)
     }
@@ -178,10 +188,6 @@ export class OpfsAhpFS extends BaseFilesystem {
       filenames.push(filename)
     }
 
-    // Reopen handles in bounded batches. Restoring every file with a single
-    // Promise.all() creates a large burst of sync-access-handle activity that is
-    // harder to observe and recover from. This batching is conservative burst
-    // control, not a claim of any verified Chrome handle limit.
     await this.#runInHandleBatches(filenames, restoreBackingFile, 'restoring idle handles')
     this.#idleHandlesReleased = false
   }
@@ -212,11 +218,98 @@ export class OpfsAhpFS extends BaseFilesystem {
     }
   }
 
+  async loadDataDirFromTar(file: File | Blob, pgDataDir: string): Promise<void> {
+    if (this.#pathExists(`${pgDataDir}/PG_VERSION`)) {
+      throw new Error('Database already exists, cannot load from tarball')
+    }
+
+    const files = await readTarFiles(file)
+    console.info(`[OpfsAhpFS] direct materialization: importing ${files.length} tar entr${files.length === 1 ? 'y' : 'ies'}`)
+    const materializationStart = Date.now()
+
+    const regularFiles: TarFile[] = []
+    for (const entry of files) {
+      const filePath = pgDataDir + entry.name
+      this.#ensureParentDirectories(filePath)
+
+      if (entry.type === DIRTYPE) {
+        this.#ensureDirectoryPath(filePath, entry.mode, entry.modifyTime)
+        continue
+      }
+      if (entry.type !== REGTYPE) {
+        continue
+      }
+
+      regularFiles.push(entry)
+    }
+
+    if (regularFiles.length > 0) {
+      console.info(
+        `[OpfsAhpFS] direct materialization: starting ${regularFiles.length} regular file(s) one file at a time`
+      )
+    }
+
+    let importedRegularFiles = 0
+    for (const [index, entry] of regularFiles.entries()) {
+      const fileNumber = index + 1
+      const fileLabel =
+        `direct materialization file ${fileNumber}/${regularFiles.length}: ` +
+        `${entry.name} (${entry.data.length} bytes)`
+      const filePath = pgDataDir + entry.name
+      await this.#runHandleOperationWithDiagnostics(fileLabel, async () => {
+        await this.#materializeRegularFileOnDemand(filePath, entry)
+      })
+      importedRegularFiles = fileNumber
+    }
+
+    await this.checkpointState()
+    this.#validateMaterializedDataDir(pgDataDir)
+    console.info(
+      `[OpfsAhpFS] direct materialization: complete ` +
+      `(${importedRegularFiles} regular file(s), ${Date.now() - materializationStart}ms total)`
+    )
+
+    // Ensure a small runtime spare pool exists after materialization.
+    // This was deliberately deferred from init so that direct materialization
+    // does not pay a 1,500+ handle creation burst up-front.
+    if (this.maintainedPoolSize > 0) {
+      await this.maintainPool(this.maintainedPoolSize)
+    }
+  }
+
   async #delayBetweenHandleBatches(): Promise<void> {
     if (this.handleBatchDelayMs <= 0) {
       return
     }
     await new Promise<void>((resolve) => setTimeout(resolve, this.handleBatchDelayMs))
+  }
+
+  async #runHandleOperationWithDiagnostics(
+    label: string,
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    const startedAt = Date.now()
+    console.info(`[OpfsAhpFS] ${label}: starting`)
+
+    let completed = false
+    const stallTimer = setTimeout(() => {
+      if (!completed) {
+        console.warn(
+          `[OpfsAhpFS] ${label}: still pending after ${HANDLE_OPERATION_STALL_REPORT_MS}ms`
+        )
+      }
+    }, HANDLE_OPERATION_STALL_REPORT_MS)
+
+    try {
+      await operation()
+      console.info(`[OpfsAhpFS] ${label}: completed in ${Date.now() - startedAt}ms`)
+    } catch (error) {
+      console.error(`[OpfsAhpFS] ${label}: failed after ${Date.now() - startedAt}ms`, error)
+      throw error
+    } finally {
+      completed = true
+      clearTimeout(stallTimer)
+    }
   }
 
   async #runInHandleBatches<T>(
@@ -227,8 +320,8 @@ export class OpfsAhpFS extends BaseFilesystem {
     const total = items.length
     if (total > 0) {
       console.info(
-        `[OpfsAhpFS] ${label}: starting ${total} handle operation(s) ` +
-        `(batch=${this.maxConcurrentHandles}, delay=${this.handleBatchDelayMs}ms)`
+        `[OpfsAhpFS] ${label}: starting ${total} sequential operation(s) ` +
+        `(batchSize=${this.maxConcurrentHandles}, delay=${this.handleBatchDelayMs}ms)`
       )
     }
 
@@ -272,22 +365,29 @@ export class OpfsAhpFS extends BaseFilesystem {
 
   async #openBackingFile(filename: string): Promise<void> {
     const fh = await this.#dataDirAh.getFileHandle(filename)
-    const sh: FileSystemSyncAccessHandle = await (
-      fh as any
-    ).createSyncAccessHandle()
+    const sh = await this.#createSyncAccessHandle(fh)
     this.#fh.set(filename, fh)
     this.#sh.set(filename, sh)
   }
 
+  async #createSyncAccessHandle(fh: FileSystemFileHandle): Promise<FileSystemSyncAccessHandle> {
+    const createSyncAccessHandle = (fh as any).createSyncAccessHandle
+    try {
+      return await createSyncAccessHandle.call(fh, { mode: 'readwrite-unsafe' })
+    } catch (error) {
+      if (error instanceof TypeError) {
+        return await createSyncAccessHandle.call(fh)
+      }
+      throw error
+    }
+  }
+
   async #createPoolFile(): Promise<void> {
-    ++this.poolCounter
-    const filename = `${(Date.now() - 1704063600).toString(16).padStart(8, '0')}-${this.poolCounter.toString(16).padStart(8, '0')}`
+    const filename = this.#nextBackingFilename()
     const fh = await this.#dataDirAh.getFileHandle(filename, {
       create: true,
     })
-    const sh: FileSystemSyncAccessHandle = await (
-      fh as any
-    ).createSyncAccessHandle()
+    const sh = await this.#createSyncAccessHandle(fh)
     this.#fh.set(filename, fh)
     this.#sh.set(filename, sh)
     this.#logWAL({
@@ -427,7 +527,7 @@ export class OpfsAhpFS extends BaseFilesystem {
 
     // This is a critical point - creating the sync access handle acquires an exclusive lock
     console.info('[OpfsAhpFS] #init: creating state sync access handle (exclusive lock)...')
-    this.#stateSH = await (this.#stateFH as any).createSyncAccessHandle()
+    this.#stateSH = await this.#createSyncAccessHandle(this.#stateFH)
     console.info('[OpfsAhpFS] #init: state sync access handle created successfully')
 
     const stateAB = new ArrayBuffer(this.#stateSH.getSize())
@@ -481,9 +581,9 @@ export class OpfsAhpFS extends BaseFilesystem {
     }
     console.info(`[OpfsAhpFS] #init: WAL replay complete (${wal.length} entr${wal.length === 1 ? 'y' : 'ies'})`)
 
-    // Open all file handles for dir tree using bounded batches. A single unbounded
-    // Promise.all() burst can create a large OPFS-AHP fan-out that is harder to
-    // observe and reason about during fs.init settlement across browsers.
+    // Open all file handles for the dir tree using bounded batches. The sync
+    // access handle API is async only at open time; PGlite requires the opened
+    // handles before synchronous query IO.
     const backingFilenames: string[] = []
     const walk = (node: Node) => {
       if (node.type === 'file') {
@@ -517,7 +617,7 @@ export class OpfsAhpFS extends BaseFilesystem {
       await this.#trimClosedPoolFiles(this.maintainedPoolSize)
     }
 
-    // Open remaining pool file handles with the same bounded batching.
+    // Open remaining runtime spare pool file handles.
     console.info(`[OpfsAhpFS] #init: opening ${this.state.pool.length} retained pool handle(s)`)
     await this.#runInHandleBatches(
       this.state.pool,
@@ -530,9 +630,18 @@ export class OpfsAhpFS extends BaseFilesystem {
       'opening retained pool files',
     )
 
-    const targetPoolSize = isNewState ? this.initialPoolSize : this.maintainedPoolSize
-    console.info(`[OpfsAhpFS] #init: maintaining pool to target size ${targetPoolSize}`)
-    await this.maintainPool(targetPoolSize)
+    if (isNewState) {
+      console.info(`[OpfsAhpFS] #init: maintaining init preallocation pool to target size ${this.initialPoolSize}`)
+      await this.maintainPool(this.initialPoolSize)
+    } else if (this.maintainRuntimePoolOnInit) {
+      console.info(`[OpfsAhpFS] #init: maintaining runtime spare pool to target size ${this.maintainedPoolSize}`)
+      await this.maintainPool(this.maintainedPoolSize)
+    } else {
+      console.info(
+        `[OpfsAhpFS] #init: skipping runtime spare pool growth during initialization ` +
+        `(current=${this.state.pool.length}, target=${this.maintainedPoolSize})`
+      )
+    }
     console.info(
       `[OpfsAhpFS] #init: COMPLETE ` +
       `(pool=${this.state.pool.length}, openHandles=${this.#sh.size}, unsynced=${this.#unsyncedSH.size})`
@@ -540,15 +649,15 @@ export class OpfsAhpFS extends BaseFilesystem {
   }
 
   async maintainPool(size?: number) {
-    size = size || this.maintainedPoolSize
-    const change = size - this.state.pool.length
+    const targetSize = size ?? this.maintainedPoolSize
+    const change = targetSize - this.state.pool.length
     if (change > 0) {
       console.info(
         `[OpfsAhpFS] maintainPool: growing pool by ${change} ` +
-        `(current=${this.state.pool.length}, target=${size})`
+        `(current=${this.state.pool.length}, target=${targetSize})`
       )
       // Populate work items without opening handles yet; #runInHandleBatches
-      // owns the bounded concurrency and inter-batch yielding.
+      // owns sequential batching and per-item stall reporting.
       await this.#runInHandleBatches(
         Array.from({ length: change }),
         async () => { await this.#createPoolFile() },
@@ -559,7 +668,7 @@ export class OpfsAhpFS extends BaseFilesystem {
     if (change < 0) {
       console.info(
         `[OpfsAhpFS] maintainPool: shrinking pool by ${Math.abs(change)} ` +
-        `(current=${this.state.pool.length}, target=${size})`
+        `(current=${this.state.pool.length}, target=${targetSize})`
       )
       await this.#runInHandleBatches(
         Array.from({ length: Math.abs(change) }),
@@ -961,6 +1070,123 @@ export class OpfsAhpFS extends BaseFilesystem {
   }
 
   // Internal methods:
+
+  #nextBackingFilename(): string {
+    ++this.poolCounter
+    return `${(Date.now() - 1704063600).toString(16).padStart(8, '0')}-${this.poolCounter.toString(16).padStart(8, '0')}`
+  }
+
+  #pathExists(path: string): boolean {
+    try {
+      this.#resolvePath(path)
+      return true
+    } catch (error) {
+      if (error instanceof FsError && error.code === ERRNO_CODES.ENOENT) {
+        return false
+      }
+      throw error
+    }
+  }
+
+  #ensureParentDirectories(path: string): void {
+    const parts = this.#pathParts(path)
+    parts.pop()
+    this.#ensureDirectoryPath(parts.join('/'))
+  }
+
+  #ensureDirectoryPath(path: string, mode = INITIAL_MODE.DIR, modifyTime?: Date | number): DirectoryNode {
+    let node = this.state.root
+    const lastModified = this.#dateToUnixMs(modifyTime)
+    for (const part of this.#pathParts(path)) {
+      const existing = node.children[part]
+      if (!existing) {
+        const next: DirectoryNode = {
+          type: 'directory',
+          lastModified,
+          mode: mode || INITIAL_MODE.DIR,
+          children: {},
+        }
+        node.children[part] = next
+        node = next
+        continue
+      }
+      if (existing.type !== 'directory') {
+        throw new FsError('ENOTDIR', 'Not a directory')
+      }
+      node = existing
+    }
+    return node
+  }
+
+  /**
+   * Create a backing file and sync access handle for materialization.
+   * Does NOT log a WAL entry or add to the pool — materialized files are
+   * part of the persisted directory tree, not spare pool entries.
+   */
+  async #createMaterializedBackingFile(): Promise<string> {
+    const filename = this.#nextBackingFilename()
+    const fh = await this.#dataDirAh.getFileHandle(filename, {
+      create: true,
+    })
+    const sh = await this.#createSyncAccessHandle(fh)
+    this.#fh.set(filename, fh)
+    this.#sh.set(filename, sh)
+    return filename
+  }
+
+  async #materializeRegularFileOnDemand(path: string, file: TarFile): Promise<void> {
+    const pathParts = this.#pathParts(path)
+    const filename = pathParts.pop()!
+    const parent = this.#ensureDirectoryPath(pathParts.join('/'))
+    if (Object.prototype.hasOwnProperty.call(parent.children, filename)) {
+      throw new FsError('EEXIST', `File already exists during direct materialization: ${path}`)
+    }
+
+    // Create a backing file on demand instead of pulling from a pre-grown pool.
+    // This avoids the 1,500+ handle creation burst that stalls browsers during
+    // direct materialization while still keeping the fast write-through-handle path.
+    const backingFilename = await this.#createMaterializedBackingFile()
+    const sh = this.#sh.get(backingFilename)
+    if (!sh) {
+      throw new FsError('EBADF', `Missing sync access handle for backing file: ${backingFilename}`)
+    }
+
+    parent.children[filename] = {
+      type: 'file',
+      lastModified: this.#dateToUnixMs(file.modifyTime),
+      mode: file.mode || INITIAL_MODE.FILE,
+      backingFilename,
+    }
+
+    if (file.data.length > 0) {
+      sh.write(new Uint8Array(file.data), { at: 0 })
+      if (path.startsWith('/pg_wal')) {
+        this.#unsyncedSH.add(sh)
+      }
+    }
+  }
+
+  #validateMaterializedDataDir(pgDataDir: string): void {
+    const missing = ['PG_VERSION', 'postgresql.conf', 'base', 'global', 'global/pg_control']
+      .filter((requiredPath) => !this.#pathExists(`${pgDataDir}/${requiredPath}`))
+    if (missing.length > 0) {
+      throw new Error(`Invalid PGlite datadir: missing required paths: ${missing.join(', ')}`)
+    }
+
+    const pgControl = this.#resolvePath(`${pgDataDir}/global/pg_control`)
+    if (pgControl.type !== 'file') {
+      throw new Error('Invalid PGlite datadir: global/pg_control is not a file')
+    }
+    const sh = this.#sh.get(pgControl.backingFilename)
+    if (!sh || sh.getSize() < 20) {
+      throw new Error(`Invalid PGlite datadir: global/pg_control is too small (${sh?.getSize() ?? 0} bytes)`)
+    }
+  }
+
+  #dateToUnixMs(date: Date | number | undefined): number {
+    if (!date) return Date.now()
+    return typeof date === 'number' ? date * 1000 : date.getTime()
+  }
 
   #tryWithWAL(entry: WALEntry, fn: () => void) {
     const offset = this.#logWAL(entry)
