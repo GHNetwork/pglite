@@ -303,7 +303,7 @@ export class PGlite
       const { dataDir, fsType } = parseDataDir(options.dataDir)
       console.debug(`[PGliteInternal][init] ${stamp()} parseDataDir result: dataDir=${dataDir}, fsType=${fsType}`)
       this.fs = await withInitStageGuard('loadFs', async () => {
-        return await loadFs(dataDir, fsType)
+        return await loadFs(dataDir, fsType, options.opfsAhpOptions)
       }, INIT_STAGE_TIMEOUT_MS) // OPFS-AHP filesystem loading can be slow but heartbeat-visible
     }
 
@@ -593,11 +593,19 @@ export class PGlite
       console.debug(`[PGliteInternal][init] ${stamp()} loading data from tarball...`)
       const loadTarStart = _now()
       const dataDirFs = this.fs!
-      if (supportsDirectDataDirLoad(dataDirFs)) {
+      const loadDataDirStrategy = options.loadDataDirStrategy ?? 'auto'
+      const canDirectLoadDataDir = supportsDirectDataDirLoad(dataDirFs)
+
+      if (loadDataDirStrategy === 'direct-opfs-ahp' && !canDirectLoadDataDir) {
+        throw new Error('loadDataDirStrategy=direct-opfs-ahp requires a filesystem with loadDataDirFromTar()')
+      }
+
+      if (canDirectLoadDataDir && loadDataDirStrategy !== 'emscripten') {
         console.info(`[PGliteInternal][init] ${stamp()} using direct OPFS-AHP data-dir materialization`)
         await dataDirFs.loadDataDirFromTar(options.loadDataDir, PGDATA)
         console.debug(`[PGliteInternal][init] ${stamp()} direct data-dir materialization completed (took ${(_now() - loadTarStart).toFixed(1)}ms)`)
       } else {
+        console.info(`[PGliteInternal][init] ${stamp()} using Emscripten VFS loadDataDir materialization`)
         await loadTar(this.mod.FS, options.loadDataDir, PGDATA)
         console.debug(`[PGliteInternal][init] ${stamp()} loadTar() completed (took ${(_now() - loadTarStart).toFixed(1)}ms)`)
       }

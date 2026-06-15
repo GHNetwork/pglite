@@ -26,7 +26,7 @@ All NMT customizations are marked with `[NMT CUSTOMIZATION]` comments in the cod
 **Summary:**
 
 - Updated Meridian and PGlite fork comments/documentation to reflect the current
-  understanding from `docs/session-data/report.md`.
+  understanding from `docs/session-data/diagnostics/report.md`.
 - There is **no verified Chrome pool handle allocation limit**.
 - Earlier Chrome-specific threshold language was based on incomplete evidence and
   should no longer be used to explain `fs.init` timeouts.

@@ -1,20 +1,7 @@
 import type { FsType, Filesystem } from './base.js'
-import type { OpfsAhpOptions } from './opfs-ahp.js'
+import type { OpfsAhpOptions } from '../interface.js'
 import { IdbFs } from './idbfs.js'
 import { MemoryFS } from './memoryfs.js'
-
-type OpfsAhpOptionsProvider =
-  | OpfsAhpOptions
-  | ((dataDir: string) => OpfsAhpOptions | undefined)
-
-type GlobalWithOpfsAhpOptions = typeof globalThis & {
-  __PGLITE_OPFS_AHP_OPTIONS__?: OpfsAhpOptionsProvider
-}
-
-function getOpfsAhpOptions(dataDir: string): OpfsAhpOptions | undefined {
-  const provider = (globalThis as GlobalWithOpfsAhpOptions).__PGLITE_OPFS_AHP_OPTIONS__
-  return typeof provider === 'function' ? provider(dataDir) : provider
-}
 
 export {
   BaseFilesystem,
@@ -53,7 +40,7 @@ export function parseDataDir(dataDir?: string) {
   return { dataDir, fsType }
 }
 
-export async function loadFs(dataDir?: string, fsType?: FsType) {
+export async function loadFs(dataDir?: string, fsType?: FsType, opfsAhpOptions?: OpfsAhpOptions) {
   let fs: Filesystem
   if (dataDir && fsType === 'nodefs') {
     // Lazy load the nodefs to avoid bundling it in the browser
@@ -64,7 +51,7 @@ export async function loadFs(dataDir?: string, fsType?: FsType) {
   } else if (dataDir && fsType === 'opfs-ahp') {
     // Lazy load the opfs-ahp to so that it's optional in the bundle
     const { OpfsAhpFS } = await import('./opfs-ahp.js')
-    fs = new OpfsAhpFS(dataDir, getOpfsAhpOptions(dataDir))
+    fs = new OpfsAhpFS(dataDir, opfsAhpOptions)
   } else {
     fs = new MemoryFS()
   }

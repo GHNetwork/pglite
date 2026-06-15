@@ -77,6 +77,25 @@ export interface DumpDataDirResult {
   filename: string
 }
 
+export interface OpfsAhpOptions {
+  /** Pool entries created during initial OPFS-AHP filesystem initialization. */
+  initialPoolSize?: number
+  /** Runtime spare pool target maintained after filesystem sync/query boundaries. */
+  maintainedPoolSize?: number
+  /**
+   * Whether #init may grow the runtime spare pool for an existing state.
+   * The initial preallocation pool remains controlled solely by initialPoolSize.
+   */
+  maintainRuntimePoolOnInit?: boolean
+  /** Number of maintenance OPFS operations to run before yielding/progress logging. */
+  maxConcurrentHandles?: number
+  /** Optional pause between handle batches. Defaults to no artificial delay. */
+  handleBatchDelayMs?: number
+  debug?: boolean
+}
+
+export type LoadDataDirStrategy = 'auto' | 'emscripten' | 'direct-opfs-ahp'
+
 export interface PGliteOptions<TExtensions extends Extensions = Extensions> {
   dataDir?: string
   username?: string
@@ -91,6 +110,16 @@ export interface PGliteOptions<TExtensions extends Extensions = Extensions> {
   fsBundle?: Blob | File
   parsers?: ParserOptions
   serializers?: SerializerOptions
+  opfsAhpOptions?: OpfsAhpOptions
+  /**
+   * Controls how `loadDataDir` is materialized.
+   *
+   * - `auto` preserves upstream-compatible behavior and lets filesystem
+   *   implementations choose an optimized path when available.
+   * - `emscripten` forces the standard tar import through the WASM VFS.
+   * - `direct-opfs-ahp` requires the OPFS-AHP direct materialization API.
+   */
+  loadDataDirStrategy?: LoadDataDirStrategy
 }
 
 export type PGliteInterface<T extends Extensions = Extensions> =
