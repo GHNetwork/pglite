@@ -316,12 +316,38 @@ export class OpfsAhpFS extends BaseFilesystem {
       this.#validateMaterializedDataDir(pgDataDir)
     } catch (error) {
       this.#logDirectMaterializationTimingSummary('failure')
+      ;(globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__ = {
+        mode: 'direct-materialization',
+        filesTotal: regularFiles.length,
+        filesCompleted: importedRegularFiles,
+        perFileMs: this.#directMaterializationTimings.map((t) => t.totalMs ?? 0),
+        totalMs: Date.now() - materializationStart,
+        terminalState: 'error',
+        failureReason: error instanceof Error ? error.message : String(error),
+      }
+      if (typeof (globalThis as { window?: unknown }).window !== 'undefined') {
+        ((globalThis as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_TIMING__ =
+          (globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__
+      }
       throw error
     }
     console.info(
       `[OpfsAhpFS] direct materialization: complete ` +
       `(${importedRegularFiles} regular file(s), ${Date.now() - materializationStart}ms total)`
     )
+    ;(globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__ = {
+      mode: 'direct-materialization',
+      filesTotal: regularFiles.length,
+      filesCompleted: importedRegularFiles,
+      perFileMs: this.#directMaterializationTimings.map((t) => t.totalMs ?? 0),
+      totalMs: Date.now() - materializationStart,
+      terminalState: 'ok',
+      failureReason: null,
+    }
+    if (typeof (globalThis as { window?: unknown }).window !== 'undefined') {
+      ((globalThis as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_TIMING__ =
+        (globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__
+    }
 
     // Ensure a small runtime spare pool exists after materialization.
     // This was deliberately deferred from init so that direct materialization
