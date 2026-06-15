@@ -53,9 +53,38 @@ describe('NMT init-stage timeout budget', () => {
     // On-demand creation avoids the 1,500+ handle creation burst.
     expect(source).toContain('#createMaterializedBackingFile')
     expect(source).toContain('#materializeRegularFileOnDemand')
-    expect(source).toContain('await this.#createMaterializedBackingFile()')
+    expect(source).toContain('await this.#createMaterializedBackingFile(timing)')
     expect(source).not.toContain('await this.#runInHandleBatches(regularFiles')
     expect(source).toContain('one file at a time')
     expect(source).toContain('direct materialization file')
+  })
+
+  it('keeps direct materialization substep timing diagnostics actionable', () => {
+    const source = opfsAhpSource()
+
+    expect(source).toContain("| 'getFileHandle(create)'")
+    expect(source).toContain("| 'createSyncAccessHandle'")
+    expect(source).toContain("| 'logical state insertion'")
+    expect(source).toContain("| 'data write'")
+    expect(source).toContain("| 'flush/close retained-open behavior'")
+    expect(source).toContain("| 'checkpoint'")
+    expect(source).toContain('#timeDirectMaterializationSubstep')
+    expect(source).toContain("#logDirectMaterializationTimingSummary('failure')")
+    expect(source).toContain("#logDirectMaterializationTimingSummary('stall')")
+		expect(source).toContain("emergencyCloseAllHandles(diagnosticsReason?: DirectMaterializationSummaryReason)")
+		expect(source).toContain("this.#logDirectMaterializationTimingSummary(diagnosticsReason)")
+    expect(source).toContain('substep timing histogram')
+    expect(source).toContain('activeSubstep=')
+    expect(source).toContain('logicalPath=')
+    expect(source).toContain('bytes=')
+    expect(source).toContain('backing=')
+  })
+
+  it('logs OPFS sync access handle mode once for contention interpretation', () => {
+    const source = opfsAhpSource()
+
+    expect(source).toContain('#syncAccessHandleModeLogged')
+    expect(source).toContain('readwrite-unsafe mode succeeded')
+    expect(source).toContain('readwrite-unsafe unsupported; fell back to default mode')
   })
 })

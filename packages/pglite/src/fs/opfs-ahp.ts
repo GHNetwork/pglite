@@ -1,28 +1,52 @@
 import { BaseFilesystem, ERRNO_CODES, type FsStats } from './base.js'
 import type { PostgresMod } from '../postgresMod.js'
 import type { PGlite } from '../pglite.js'
+import type { OpfsAhpOptions } from '../interface.js'
 import { readTarFiles } from './tarUtils.js'
 import { DIRTYPE, REGTYPE, type TarFile } from 'tinytar'
 
-export interface OpfsAhpOptions {
-  /** Pool entries created during initial OPFS-AHP filesystem initialization. */
-  initialPoolSize?: number
-  /** Runtime spare pool target maintained after filesystem sync/query boundaries. */
-  maintainedPoolSize?: number
-  /**
-   * Whether #init may grow the runtime spare pool for an existing state.
-   * The initial preallocation pool remains controlled solely by initialPoolSize.
-   */
-  maintainRuntimePoolOnInit?: boolean
-  /** Number of maintenance OPFS operations to run before yielding/progress logging. */
-  maxConcurrentHandles?: number
-  /** Optional pause between handle batches. Defaults to no artificial delay. */
-  handleBatchDelayMs?: number
-  debug?: boolean
-}
+export { type OpfsAhpOptions } from '../interface.js'
 
 const HANDLE_OPERATION_STALL_REPORT_MS = 5000
 const DEFAULT_HANDLE_BATCH_SIZE = 100
+
+type DirectMaterializationSubstep =
+  | 'getFileHandle(create)'
+  | 'createSyncAccessHandle'
+  | 'logical state insertion'
+  | 'data write'
+  | 'flush/close retained-open behavior'
+  | 'checkpoint'
+
+type DirectMaterializationSummaryReason = 'failure' | 'stall' | 'emergency-cleanup'
+
+interface DirectMaterializationSubstepTiming {
+  substep: DirectMaterializationSubstep
+  ms: number
+}
+
+interface DirectMaterializationFileTiming {
+  fileNumber: number
+  totalFiles: number
+  logicalPath: string
+  bytes: number
+  backingFilename?: string
+  startedAt: number
+  totalMs?: number
+  activeSubstep?: DirectMaterializationSubstep
+  substeps: DirectMaterializationSubstepTiming[]
+}
+
+interface DirectMaterializationSubstepStats {
+  count: number
+  totalMs: number
+  maxMs: number
+  bucketLe10Ms: number
+  bucketLe100Ms: number
+  bucketLe1000Ms: number
+  bucketGt1000Ms: number
+  slowest?: DirectMaterializationFileTiming
+}
 
 // TypeScript doesn't have a built-in type for FileSystemSyncAccessHandle
 export interface FileSystemSyncAccessHandle {
@@ -105,6 +129,9 @@ export class OpfsAhpFS extends BaseFilesystem {
   #handleIdCounter = 0
   #openHandlePaths: Map<number, string> = new Map()
   #openHandleIds: Map<string, number> = new Map()
+
+  #directMaterializationTimings: DirectMaterializationFileTiming[] = []
+  #syncAccessHandleModeLogged = false
 
   state!: State
   lastCheckpoint = 0
@@ -226,6 +253,7 @@ export class OpfsAhpFS extends BaseFilesystem {
     const files = await readTarFiles(file)
     console.info(`[OpfsAhpFS] direct materialization: importing ${files.length} tar entr${files.length === 1 ? 'y' : 'ies'}`)
     const materializationStart = Date.now()
+    this.#directMaterializationTimings = []
 
     const regularFiles: TarFile[] = []
     for (const entry of files) {
@@ -250,20 +278,46 @@ export class OpfsAhpFS extends BaseFilesystem {
     }
 
     let importedRegularFiles = 0
-    for (const [index, entry] of regularFiles.entries()) {
-      const fileNumber = index + 1
-      const fileLabel =
-        `direct materialization file ${fileNumber}/${regularFiles.length}: ` +
-        `${entry.name} (${entry.data.length} bytes)`
-      const filePath = pgDataDir + entry.name
-      await this.#runHandleOperationWithDiagnostics(fileLabel, async () => {
-        await this.#materializeRegularFileOnDemand(filePath, entry)
-      })
-      importedRegularFiles = fileNumber
-    }
+    try {
+      for (const [index, entry] of regularFiles.entries()) {
+        const fileNumber = index + 1
+        const filePath = pgDataDir + entry.name
+        const timing = this.#createDirectMaterializationTiming(
+          fileNumber,
+          regularFiles.length,
+          filePath,
+          entry.data.length,
+        )
+        const fileLabel =
+          `direct materialization file ${fileNumber}/${regularFiles.length}: ` +
+          `${entry.name} (${entry.data.length} bytes)`
+        await this.#runHandleOperationWithDiagnostics(fileLabel, async () => {
+          await this.#materializeRegularFileOnDemand(filePath, entry, timing)
+        })
+        timing.totalMs = Date.now() - timing.startedAt
+        importedRegularFiles = fileNumber
+        if (this.debug) {
+          console.debug(`[OpfsAhpFS] ${this.#formatDirectMaterializationTiming(timing)}`)
+        }
+      }
 
-    await this.checkpointState()
-    this.#validateMaterializedDataDir(pgDataDir)
+      const checkpointTiming = this.#createDirectMaterializationTiming(
+        importedRegularFiles,
+        regularFiles.length,
+        `${pgDataDir}/<checkpoint>`,
+        0,
+      )
+      await this.#timeDirectMaterializationSubstep(
+        checkpointTiming,
+        'checkpoint',
+        async () => { await this.checkpointState() },
+      )
+      checkpointTiming.totalMs = Date.now() - checkpointTiming.startedAt
+      this.#validateMaterializedDataDir(pgDataDir)
+    } catch (error) {
+      this.#logDirectMaterializationTimingSummary('failure')
+      throw error
+    }
     console.info(
       `[OpfsAhpFS] direct materialization: complete ` +
       `(${importedRegularFiles} regular file(s), ${Date.now() - materializationStart}ms total)`
@@ -297,6 +351,7 @@ export class OpfsAhpFS extends BaseFilesystem {
         console.warn(
           `[OpfsAhpFS] ${label}: still pending after ${HANDLE_OPERATION_STALL_REPORT_MS}ms`
         )
+        this.#logDirectMaterializationTimingSummary('stall')
       }
     }, HANDLE_OPERATION_STALL_REPORT_MS)
 
@@ -373,10 +428,14 @@ export class OpfsAhpFS extends BaseFilesystem {
   async #createSyncAccessHandle(fh: FileSystemFileHandle): Promise<FileSystemSyncAccessHandle> {
     const createSyncAccessHandle = (fh as any).createSyncAccessHandle
     try {
-      return await createSyncAccessHandle.call(fh, { mode: 'readwrite-unsafe' })
+      const sh = await createSyncAccessHandle.call(fh, { mode: 'readwrite-unsafe' })
+      this.#logSyncAccessHandleMode('readwrite-unsafe')
+      return sh
     } catch (error) {
       if (error instanceof TypeError) {
-        return await createSyncAccessHandle.call(fh)
+        const sh = await createSyncAccessHandle.call(fh)
+        this.#logSyncAccessHandleMode('default')
+        return sh
       }
       throw error
     }
@@ -437,7 +496,11 @@ export class OpfsAhpFS extends BaseFilesystem {
   //
   // See: docs/debugging/pglite-opfs-root-cause-analysis.md
   // =============================================================================
-  async emergencyCloseAllHandles(): Promise<void> {
+  async emergencyCloseAllHandles(diagnosticsReason?: DirectMaterializationSummaryReason): Promise<void> {
+    if (diagnosticsReason) {
+      this.#logDirectMaterializationTimingSummary(diagnosticsReason)
+    }
+
     console.info('[OpfsAhpFS] emergencyCloseAllHandles: starting emergency cleanup...')
     let closedCount = 0
     let errorCount = 0
@@ -1123,18 +1186,31 @@ export class OpfsAhpFS extends BaseFilesystem {
    * Does NOT log a WAL entry or add to the pool — materialized files are
    * part of the persisted directory tree, not spare pool entries.
    */
-  async #createMaterializedBackingFile(): Promise<string> {
+  async #createMaterializedBackingFile(timing: DirectMaterializationFileTiming): Promise<string> {
     const filename = this.#nextBackingFilename()
-    const fh = await this.#dataDirAh.getFileHandle(filename, {
-      create: true,
-    })
-    const sh = await this.#createSyncAccessHandle(fh)
+    timing.backingFilename = filename
+    const fh = await this.#timeDirectMaterializationSubstep(
+      timing,
+      'getFileHandle(create)',
+      async () => await this.#dataDirAh.getFileHandle(filename, {
+        create: true,
+      }),
+    )
+    const sh = await this.#timeDirectMaterializationSubstep(
+      timing,
+      'createSyncAccessHandle',
+      async () => await this.#createSyncAccessHandle(fh),
+    )
     this.#fh.set(filename, fh)
     this.#sh.set(filename, sh)
     return filename
   }
 
-  async #materializeRegularFileOnDemand(path: string, file: TarFile): Promise<void> {
+  async #materializeRegularFileOnDemand(
+    path: string,
+    file: TarFile,
+    timing: DirectMaterializationFileTiming,
+  ): Promise<void> {
     const pathParts = this.#pathParts(path)
     const filename = pathParts.pop()!
     const parent = this.#ensureDirectoryPath(pathParts.join('/'))
@@ -1145,24 +1221,170 @@ export class OpfsAhpFS extends BaseFilesystem {
     // Create a backing file on demand instead of pulling from a pre-grown pool.
     // This avoids the 1,500+ handle creation burst that stalls browsers during
     // direct materialization while still keeping the fast write-through-handle path.
-    const backingFilename = await this.#createMaterializedBackingFile()
+    const backingFilename = await this.#createMaterializedBackingFile(timing)
     const sh = this.#sh.get(backingFilename)
     if (!sh) {
       throw new FsError('EBADF', `Missing sync access handle for backing file: ${backingFilename}`)
     }
 
-    parent.children[filename] = {
-      type: 'file',
-      lastModified: this.#dateToUnixMs(file.modifyTime),
-      mode: file.mode || INITIAL_MODE.FILE,
-      backingFilename,
-    }
+    this.#timeDirectMaterializationSubstep(timing, 'logical state insertion', () => {
+      parent.children[filename] = {
+        type: 'file',
+        lastModified: this.#dateToUnixMs(file.modifyTime),
+        mode: file.mode || INITIAL_MODE.FILE,
+        backingFilename,
+      }
+    })
 
     if (file.data.length > 0) {
-      sh.write(new Uint8Array(file.data), { at: 0 })
-      if (path.startsWith('/pg_wal')) {
-        this.#unsyncedSH.add(sh)
+      this.#timeDirectMaterializationSubstep(timing, 'data write', () => {
+        sh.write(new Uint8Array(file.data), { at: 0 })
+      })
+      this.#timeDirectMaterializationSubstep(timing, 'flush/close retained-open behavior', () => {
+        // Direct materialization intentionally keeps handles open for the PGlite runtime.
+        // WAL writes remain marked unsynced; no per-file flush/close is performed here.
+        if (path.startsWith('/pg_wal')) {
+          this.#unsyncedSH.add(sh)
+        }
+      })
+    } else {
+      this.#timeDirectMaterializationSubstep(timing, 'data write', () => {})
+      this.#timeDirectMaterializationSubstep(timing, 'flush/close retained-open behavior', () => {})
+    }
+  }
+
+  #createDirectMaterializationTiming(
+    fileNumber: number,
+    totalFiles: number,
+    logicalPath: string,
+    bytes: number,
+  ): DirectMaterializationFileTiming {
+    const timing: DirectMaterializationFileTiming = {
+      fileNumber,
+      totalFiles,
+      logicalPath,
+      bytes,
+      startedAt: Date.now(),
+      substeps: [],
+    }
+    this.#directMaterializationTimings.push(timing)
+    return timing
+  }
+
+  async #timeDirectMaterializationSubstep<T>(
+    timing: DirectMaterializationFileTiming,
+    substep: DirectMaterializationSubstep,
+    operation: () => Promise<T>,
+  ): Promise<T>
+  #timeDirectMaterializationSubstep<T>(
+    timing: DirectMaterializationFileTiming,
+    substep: DirectMaterializationSubstep,
+    operation: () => T,
+  ): T
+  #timeDirectMaterializationSubstep<T>(
+    timing: DirectMaterializationFileTiming,
+    substep: DirectMaterializationSubstep,
+    operation: () => T | Promise<T>,
+  ): T | Promise<T> {
+    const startedAt = Date.now()
+    timing.activeSubstep = substep
+    const finish = () => {
+      timing.substeps.push({ substep, ms: Date.now() - startedAt })
+      if (timing.activeSubstep === substep) {
+        delete timing.activeSubstep
       }
+    }
+
+    try {
+      const result = operation()
+      if (result instanceof Promise) {
+        return result.finally(finish)
+      }
+      finish()
+      return result
+    } catch (error) {
+      finish()
+      throw error
+    }
+  }
+
+  #logDirectMaterializationTimingSummary(reason: DirectMaterializationSummaryReason): void {
+    if (this.#directMaterializationTimings.length === 0) {
+      return
+    }
+
+    const stats = new Map<DirectMaterializationSubstep, DirectMaterializationSubstepStats>()
+    for (const timing of this.#directMaterializationTimings) {
+      for (const substepTiming of timing.substeps) {
+        const current = stats.get(substepTiming.substep) ?? {
+          count: 0,
+          totalMs: 0,
+          maxMs: 0,
+          bucketLe10Ms: 0,
+          bucketLe100Ms: 0,
+          bucketLe1000Ms: 0,
+          bucketGt1000Ms: 0,
+        }
+        current.count++
+        current.totalMs += substepTiming.ms
+        if (substepTiming.ms <= 10) current.bucketLe10Ms++
+        else if (substepTiming.ms <= 100) current.bucketLe100Ms++
+        else if (substepTiming.ms <= 1000) current.bucketLe1000Ms++
+        else current.bucketGt1000Ms++
+        if (substepTiming.ms > current.maxMs) {
+          current.maxMs = substepTiming.ms
+          current.slowest = timing
+        }
+        stats.set(substepTiming.substep, current)
+      }
+    }
+
+    const histogram = Array.from(stats.entries()).map(([substep, stat]) => {
+      const avgMs = stat.count === 0 ? 0 : Math.round(stat.totalMs / stat.count)
+      const slowest = stat.slowest
+        ? `slowest=file ${stat.slowest.fileNumber}/${stat.slowest.totalFiles} ` +
+          `${stat.slowest.logicalPath} backing=${stat.slowest.backingFilename ?? 'n/a'}`
+        : 'slowest=n/a'
+      return `${substep}: count=${stat.count}, avg=${avgMs}ms, max=${stat.maxMs}ms, ` +
+        `buckets(<=10/<=100/<=1000/>1000ms)=` +
+        `${stat.bucketLe10Ms}/${stat.bucketLe100Ms}/${stat.bucketLe1000Ms}/${stat.bucketGt1000Ms}, ${slowest}`
+    })
+
+    console.warn(
+      `[OpfsAhpFS] direct materialization ${reason} substep timing histogram: ` +
+      (histogram.length > 0 ? histogram.join(' | ') : 'no completed substeps')
+    )
+
+    const active = this.#directMaterializationTimings.find((timing) => timing.activeSubstep)
+    if (active) {
+      console.warn(
+        `[OpfsAhpFS] direct materialization active operation: ` +
+        `file=${active.fileNumber}/${active.totalFiles}, logicalPath=${active.logicalPath}, ` +
+        `bytes=${active.bytes}, backing=${active.backingFilename ?? 'n/a'}, ` +
+        `activeSubstep=${active.activeSubstep}, elapsed=${Date.now() - active.startedAt}ms`
+      )
+    }
+  }
+
+  #formatDirectMaterializationTiming(timing: DirectMaterializationFileTiming): string {
+    const substeps = timing.substeps
+      .map(({ substep, ms }) => `${substep}=${ms}ms`)
+      .join(', ')
+    return `direct materialization timing: file=${timing.fileNumber}/${timing.totalFiles}, ` +
+      `logicalPath=${timing.logicalPath}, bytes=${timing.bytes}, ` +
+      `backing=${timing.backingFilename ?? 'n/a'}, total=${timing.totalMs ?? 'n/a'}ms, ` +
+      `substeps=[${substeps}]`
+  }
+
+  #logSyncAccessHandleMode(mode: 'readwrite-unsafe' | 'default'): void {
+    if (this.#syncAccessHandleModeLogged) {
+      return
+    }
+    this.#syncAccessHandleModeLogged = true
+    if (mode === 'readwrite-unsafe') {
+      console.info('[OpfsAhpFS] createSyncAccessHandle: readwrite-unsafe mode succeeded')
+    } else {
+      console.warn('[OpfsAhpFS] createSyncAccessHandle: readwrite-unsafe unsupported; fell back to default mode')
     }
   }
 
