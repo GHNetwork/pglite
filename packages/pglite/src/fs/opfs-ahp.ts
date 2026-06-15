@@ -326,7 +326,7 @@ export class OpfsAhpFS extends BaseFilesystem {
         failureReason: error instanceof Error ? error.message : String(error),
       }
       if (typeof (globalThis as { window?: unknown }).window !== 'undefined') {
-        ((globalThis as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_TIMING__ =
+        ((globalThis as unknown as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_TIMING__ =
           (globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__
       }
       throw error
@@ -345,7 +345,7 @@ export class OpfsAhpFS extends BaseFilesystem {
       failureReason: null,
     }
     if (typeof (globalThis as { window?: unknown }).window !== 'undefined') {
-      ((globalThis as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_TIMING__ =
+      ((globalThis as unknown as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_TIMING__ =
         (globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__
     }
 
