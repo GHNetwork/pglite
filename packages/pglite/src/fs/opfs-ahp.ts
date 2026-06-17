@@ -8,7 +8,43 @@ import { DIRTYPE, REGTYPE, type TarFile } from 'tinytar'
 export { type OpfsAhpOptions } from '../interface.js'
 
 const HANDLE_OPERATION_STALL_REPORT_MS = 5000
-const DEFAULT_HANDLE_BATCH_SIZE = 100
+const DEFAULT_HANDLE_BATCH_SIZE = 50
+const POOL_TELEMETRY_CHECKPOINT_INTERVAL = 50
+
+interface PoolTelemetrySnapshot {
+  checkpoint: string
+  poolLen: number
+  shSize: number
+  fhSize: number
+  unsyncedSize: number
+  lastOp: string | null
+  lastOpMs: number | null
+  lastFileNumber: number | null
+  totalFiles: number | null
+  completedFiles: number | null
+  timestamp: number
+}
+
+// Module-scope buffer for the most recent snapshot per checkpoint.
+// Indexed by checkpoint name so consumers (Meridian, Playwright) can
+// read the latest snapshot for any checkpoint via the globalThis export.
+const __POOL_TELEMETRY_LAST__: Map<string, PoolTelemetrySnapshot> = new Map()
+
+function emitPoolTelemetry(snapshot: PoolTelemetrySnapshot): void {
+  __POOL_TELEMETRY_LAST__.set(snapshot.checkpoint, snapshot)
+  console.info(
+    `[OpfsAhpFS-pool-telemetry] ${JSON.stringify(snapshot)}`
+  )
+  if (typeof (globalThis as { window?: unknown }).window !== 'undefined') {
+    ((globalThis as unknown as { window: Record<string, unknown> }).window).__MERIDIAN_OPFS_AHP_POOL_TELEMETRY__ =
+      Object.fromEntries(__POOL_TELEMETRY_LAST__)
+  }
+}
+
+// Initialize the globalThis export
+if (typeof globalThis !== 'undefined') {
+  (globalThis as { __MERIDIAN_OPFS_AHP_POOL_TELEMETRY__?: unknown }).__MERIDIAN_OPFS_AHP_POOL_TELEMETRY__ = {}
+}
 
 type DirectMaterializationSubstep =
   | 'getFileHandle(create)'
@@ -73,6 +109,11 @@ export interface State {
 }
 
 export type PoolFilenames = Array<string>
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __MERIDIAN_OPFS_AHP_POOL_TELEMETRY__: Record<string, PoolTelemetrySnapshot> | undefined
+}
 
 // WAL
 
@@ -155,7 +196,7 @@ export class OpfsAhpFS extends BaseFilesystem {
       maintainedPoolSize = 100,
       maintainRuntimePoolOnInit = true,
       maxConcurrentHandles = DEFAULT_HANDLE_BATCH_SIZE,
-      handleBatchDelayMs = 0,
+      handleBatchDelayMs = 16,
       debug = false,
     }: OpfsAhpOptions = {},
   ) {
@@ -251,6 +292,20 @@ export class OpfsAhpFS extends BaseFilesystem {
     }
 
     const files = await readTarFiles(file)
+    // EXP-G01 telemetry: pool state at loadDataDirFromTar entry
+    emitPoolTelemetry({
+      checkpoint: 'loadDataDirFromTar-start',
+      poolLen: this.state.pool.length,
+      shSize: this.#sh.size,
+      fhSize: this.#fh.size,
+      unsyncedSize: this.#unsyncedSH.size,
+      lastOp: null,
+      lastOpMs: null,
+      lastFileNumber: null,
+      totalFiles: files.length,
+      completedFiles: null,
+      timestamp: Date.now(),
+    })
     console.info(`[OpfsAhpFS] direct materialization: importing ${files.length} tar entr${files.length === 1 ? 'y' : 'ies'}`)
     const materializationStart = Date.now()
     this.#directMaterializationTimings = []
@@ -282,6 +337,22 @@ export class OpfsAhpFS extends BaseFilesystem {
       for (const [index, entry] of regularFiles.entries()) {
         const fileNumber = index + 1
         const filePath = pgDataDir + entry.name
+        // EXP-G01 telemetry: every Nth file at loop entry
+        if (index % POOL_TELEMETRY_CHECKPOINT_INTERVAL === 0) {
+          emitPoolTelemetry({
+            checkpoint: 'loadDataDirFromTar-file',
+            poolLen: this.state.pool.length,
+            shSize: this.#sh.size,
+            fhSize: this.#fh.size,
+            unsyncedSize: this.#unsyncedSH.size,
+            lastOp: '#materializeRegularFileOnDemand',
+            lastOpMs: null,
+            lastFileNumber: fileNumber,
+            totalFiles: regularFiles.length,
+            completedFiles: importedRegularFiles,
+            timestamp: Date.now(),
+          })
+        }
         const timing = this.#createDirectMaterializationTiming(
           fileNumber,
           regularFiles.length,
@@ -296,6 +367,22 @@ export class OpfsAhpFS extends BaseFilesystem {
         })
         timing.totalMs = Date.now() - timing.startedAt
         importedRegularFiles = fileNumber
+        // EXP-G01 telemetry: post-materialization with measured cost (every Nth file)
+        if (index % POOL_TELEMETRY_CHECKPOINT_INTERVAL === 0) {
+          emitPoolTelemetry({
+            checkpoint: 'loadDataDirFromTar-file-done',
+            poolLen: this.state.pool.length,
+            shSize: this.#sh.size,
+            fhSize: this.#fh.size,
+            unsyncedSize: this.#unsyncedSH.size,
+            lastOp: '#materializeRegularFileOnDemand',
+            lastOpMs: timing.totalMs ?? null,
+            lastFileNumber: fileNumber,
+            totalFiles: regularFiles.length,
+            completedFiles: importedRegularFiles,
+            timestamp: Date.now(),
+          })
+        }
         if (this.debug) {
           console.debug(`[OpfsAhpFS] ${this.#formatDirectMaterializationTiming(timing)}`)
         }
@@ -314,6 +401,20 @@ export class OpfsAhpFS extends BaseFilesystem {
       )
       checkpointTiming.totalMs = Date.now() - checkpointTiming.startedAt
       this.#validateMaterializedDataDir(pgDataDir)
+      // EXP-G01 telemetry: after data dir validation
+      emitPoolTelemetry({
+        checkpoint: 'loadDataDirFromTar-checkpoint',
+        poolLen: this.state.pool.length,
+        shSize: this.#sh.size,
+        fhSize: this.#fh.size,
+        unsyncedSize: this.#unsyncedSH.size,
+        lastOp: 'validateMaterializedDataDir',
+        lastOpMs: checkpointTiming.totalMs ?? null,
+        lastFileNumber: importedRegularFiles,
+        totalFiles: regularFiles.length,
+        completedFiles: importedRegularFiles,
+        timestamp: Date.now(),
+      })
     } catch (error) {
       this.#logDirectMaterializationTimingSummary('failure')
       ;(globalThis as { __MERIDIAN_OPFS_AHP_TIMING__?: unknown }).__MERIDIAN_OPFS_AHP_TIMING__ = {
@@ -355,6 +456,20 @@ export class OpfsAhpFS extends BaseFilesystem {
     if (this.maintainedPoolSize > 0) {
       await this.maintainPool(this.maintainedPoolSize)
     }
+    // EXP-G01 telemetry: end of loadDataDirFromTar
+    emitPoolTelemetry({
+      checkpoint: 'loadDataDirFromTar-end',
+      poolLen: this.state.pool.length,
+      shSize: this.#sh.size,
+      fhSize: this.#fh.size,
+      unsyncedSize: this.#unsyncedSH.size,
+      lastOp: 'maintainPool',
+      lastOpMs: null,
+      lastFileNumber: importedRegularFiles,
+      totalFiles: regularFiles.length,
+      completedFiles: importedRegularFiles,
+      timestamp: Date.now(),
+    })
   }
 
   async #delayBetweenHandleBatches(): Promise<void> {
@@ -595,6 +710,21 @@ export class OpfsAhpFS extends BaseFilesystem {
     // =============================================================================
     console.info(`[OpfsAhpFS] #init: starting OPFS-AHP initialization for dataDir=${this.dataDir}`)
 
+    // EXP-G01 telemetry: baseline pool state at #init() entry
+    emitPoolTelemetry({
+      checkpoint: '#init-start',
+      poolLen: this.state?.pool?.length ?? 0,
+      shSize: this.#sh.size,
+      fhSize: this.#fh.size,
+      unsyncedSize: this.#unsyncedSH.size,
+      lastOp: null,
+      lastOpMs: null,
+      lastFileNumber: null,
+      totalFiles: null,
+      completedFiles: null,
+      timestamp: Date.now(),
+    })
+
     this.#opfsRootAh = await navigator.storage.getDirectory()
     console.debug('[OpfsAhpFS] #init: got OPFS root directory handle')
 
@@ -722,9 +852,37 @@ export class OpfsAhpFS extends BaseFilesystem {
     if (isNewState) {
       console.info(`[OpfsAhpFS] #init: maintaining init preallocation pool to target size ${this.initialPoolSize}`)
       await this.maintainPool(this.initialPoolSize)
+      // EXP-G01 telemetry: pool state after initial pool growth
+      emitPoolTelemetry({
+        checkpoint: '#init-after-maintainPool',
+        poolLen: this.state.pool.length,
+        shSize: this.#sh.size,
+        fhSize: this.#fh.size,
+        unsyncedSize: this.#unsyncedSH.size,
+        lastOp: `maintainPool(${this.initialPoolSize})`,
+        lastOpMs: null,
+        lastFileNumber: null,
+        totalFiles: null,
+        completedFiles: null,
+        timestamp: Date.now(),
+      })
     } else if (this.maintainRuntimePoolOnInit) {
       console.info(`[OpfsAhpFS] #init: maintaining runtime spare pool to target size ${this.maintainedPoolSize}`)
       await this.maintainPool(this.maintainedPoolSize)
+      // EXP-G01 telemetry: pool state after runtime pool maintenance
+      emitPoolTelemetry({
+        checkpoint: '#init-after-maintainedPool-runtime',
+        poolLen: this.state.pool.length,
+        shSize: this.#sh.size,
+        fhSize: this.#fh.size,
+        unsyncedSize: this.#unsyncedSH.size,
+        lastOp: `maintainPool(${this.maintainedPoolSize})`,
+        lastOpMs: null,
+        lastFileNumber: null,
+        totalFiles: null,
+        completedFiles: null,
+        timestamp: Date.now(),
+      })
     } else {
       console.info(
         `[OpfsAhpFS] #init: skipping runtime spare pool growth during initialization ` +
@@ -1075,6 +1233,20 @@ export class OpfsAhpFS extends BaseFilesystem {
 
     if (!Object.prototype.hasOwnProperty.call(parent.children, filename)) {
       if (this.state.pool.length === 0) {
+        // EXP-G01 telemetry: critical evidence capture before pool exhaustion throw
+        emitPoolTelemetry({
+          checkpoint: 'writeFile-throw-no-pool',
+          poolLen: this.state.pool.length,
+          shSize: this.#sh.size,
+          fhSize: this.#fh.size,
+          unsyncedSize: this.#unsyncedSH.size,
+          lastOp: 'writeFile',
+          lastOpMs: null,
+          lastFileNumber: null,
+          totalFiles: null,
+          completedFiles: null,
+          timestamp: Date.now(),
+        })
         throw new Error('No more file handles available in the pool')
       }
       const node: Node = {
@@ -1237,6 +1409,20 @@ export class OpfsAhpFS extends BaseFilesystem {
     file: TarFile,
     timing: DirectMaterializationFileTiming,
   ): Promise<void> {
+    // EXP-G01 telemetry: start of per-file materialization
+    emitPoolTelemetry({
+      checkpoint: '#materializeRegularFileOnDemand-start',
+      poolLen: this.state.pool.length,
+      shSize: this.#sh.size,
+      fhSize: this.#fh.size,
+      unsyncedSize: this.#unsyncedSH.size,
+      lastOp: '#materializeRegularFileOnDemand',
+      lastOpMs: null,
+      lastFileNumber: timing.fileNumber,
+      totalFiles: timing.totalFiles,
+      completedFiles: null,
+      timestamp: Date.now(),
+    })
     const pathParts = this.#pathParts(path)
     const filename = pathParts.pop()!
     const parent = this.#ensureDirectoryPath(pathParts.join('/'))
@@ -1277,6 +1463,20 @@ export class OpfsAhpFS extends BaseFilesystem {
       this.#timeDirectMaterializationSubstep(timing, 'data write', () => {})
       this.#timeDirectMaterializationSubstep(timing, 'flush/close retained-open behavior', () => {})
     }
+    // EXP-G01 telemetry: end of per-file materialization with measured cost
+    emitPoolTelemetry({
+      checkpoint: '#materializeRegularFileOnDemand-end',
+      poolLen: this.state.pool.length,
+      shSize: this.#sh.size,
+      fhSize: this.#fh.size,
+      unsyncedSize: this.#unsyncedSH.size,
+      lastOp: '#materializeRegularFileOnDemand',
+      lastOpMs: Date.now() - timing.startedAt,
+      lastFileNumber: timing.fileNumber,
+      totalFiles: timing.totalFiles,
+      completedFiles: timing.fileNumber,
+      timestamp: Date.now(),
+    })
   }
 
   #createDirectMaterializationTiming(
